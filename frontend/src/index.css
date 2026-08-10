@@ -1,0 +1,167 @@
+:root {
+  /* WhatsApp Dark Theme (Default) */
+  --wa-bg-deep: #0b141a;
+  --wa-bg-app: #111b21;
+  --wa-bg-panel: #202c33;
+  --wa-bg-header: #202c33;
+  --wa-bg-hover: #2a3942;
+  --wa-bg-active: #2a3942;
+  --wa-bg-input: #2a3942;
+  
+  --wa-msg-out: #005c4b;
+  --wa-msg-in: #202c33;
+  
+  --wa-accent: #00a884;
+  --wa-accent-hover: #06cf9c;
+  --wa-text-primary: #e9edef;
+  --wa-text-secondary: #8696a0;
+  --wa-text-muted: #667781;
+  --wa-border: #222d34;
+  --wa-shadow: rgba(0, 0, 0, 0.3);
+
+  --font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, Helvetica, Arial, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font-family);
+  background-color: var(--wa-bg-deep);
+  color: var(--wa-text-primary);
+  height: 100vh;
+  height: 100dvh;
+  width: 100vw;
+  overflow: hidden;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  -webkit-font-smoothing: antialiased;
+}
+
+#root {
+  width: 100%;
+  height: 100vh;
+  height: 100dvh;
+  display: flex;
+  background-color: var(--wa-bg-app);
+  overflow: hidden;
+}
+
+/* Custom Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(134, 150, 160, 0.2);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(134, 150, 160, 0.4);
+}
+
+/* Mobile Responsive Utility Classes */
+@media (max-width: 768px) {
+  body {
+    -webkit-overflow-scrolling: touch;
+  }
+  
+  .hide-on-mobile {
+    display: none !important;
+  }
+  
+  .show-on-mobile {
+    display: flex !important;
+  }
+  
+  .wa-app-container {
+    flex-direction: column;
+    height: 100vh !important;
+    height: 100dvh !important;
+    overflow: hidden !important;
+  }
+
+  .wa-sidebar-container {
+    width: 100% !important;
+    min-width: 100% !important;
+    height: 100% !important;
+  }
+
+  .wa-chat-container {
+    width: 100% !important;
+    height: 100% !important;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .wa-chat-header {
+    position: sticky !important;
+    top: 0 !important;
+    z-index: 100 !important;
+    flex-shrink: 0 !important;
+  }
+
+  .wa-chat-footer {
+    position: sticky !important;
+    bottom: 0 !important;
+    z-index: 100 !important;
+    flex-shrink: 0 !important;
+  }
+
+  .wa-message-bubble {
+    max-width: 85% !important;
+  }
+
+  .wa-modal-content {
+    width: 92% !important;
+    padding: 20px !important;
+  }
+
+  /* Mobile Bottom Navigation Rail */
+  .wa-nav-rail {
+    flex-direction: row !important;
+    width: 100% !important;
+    height: 60px !important;
+    min-height: 60px !important;
+    border-right: none !important;
+    border-top: 1px solid #222d34 !important;
+    position: fixed !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    z-index: 1000 !important;
+    padding: 0 8px !important;
+    justify-content: space-around !important;
+    background-color: #202c33 !important;
+  }
+
+  .wa-nav-rail-top {
+    flex-direction: row !important;
+    width: 100% !important;
+    justify-content: space-around !important;
+  }
+
+  .wa-nav-rail-bottom {
+    display: none !important;
+  }
+}
+
+@media (min-width: 769px) {
+  .show-on-mobile {
+    display: none !important;
+  }
+}
+
