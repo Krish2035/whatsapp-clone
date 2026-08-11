@@ -4,7 +4,6 @@ const getSocketUrl = () => {
   if (import.meta.env.VITE_SOCKET_URL) {
     return import.meta.env.VITE_SOCKET_URL;
   }
-  // Use relative origin so Vite proxy handles /socket.io correctly for localhost, IP, and ngrok HTTPS
   return undefined;
 };
 
@@ -62,6 +61,100 @@ class SocketService {
 
   getSocket() {
     return this.socket;
+  }
+
+  // =========================================================================
+  // Call Signaling & WebRTC Transport Helpers
+  // =========================================================================
+
+  initiateCall({ receiverId, callType = 'voice', conversationId = null, channelName = null, signalData = null }) {
+    if (this.socket) {
+      this.socket.emit('CALL_INITIATE', {
+        receiverId,
+        userToCall: receiverId,
+        callType,
+        conversationId,
+        channelName,
+        signalData,
+        signal: signalData,
+        from: this.userId,
+      });
+    }
+  }
+
+  acceptCall({ callId, callerId, signal = null }) {
+    if (this.socket) {
+      this.socket.emit('CALL_ACCEPT', {
+        callId,
+        to: callerId,
+        callerId,
+        signal,
+      });
+    }
+  }
+
+  rejectCall({ callId, callerId, reason = 'rejected' }) {
+    if (this.socket) {
+      this.socket.emit('CALL_REJECT', {
+        callId,
+        to: callerId,
+        callerId,
+        reason,
+      });
+    }
+  }
+
+  cancelCall({ callId, receiverId, reason = 'cancelled' }) {
+    if (this.socket) {
+      this.socket.emit('CALL_CANCEL', {
+        callId,
+        to: receiverId,
+        receiverId,
+        reason,
+      });
+    }
+  }
+
+  endCall({ callId, targetUserId, durationSeconds = 0 }) {
+    if (this.socket) {
+      this.socket.emit('CALL_END', {
+        callId,
+        to: targetUserId,
+        targetUserId,
+        durationSeconds,
+      });
+    }
+  }
+
+  sendWebRtcOffer({ callId, targetUserId, offer }) {
+    if (this.socket) {
+      this.socket.emit('WEBRTC_OFFER', {
+        callId,
+        targetUserId,
+        offer,
+      });
+    }
+  }
+
+  sendWebRtcAnswer({ callId, targetUserId, answer }) {
+    if (this.socket) {
+      this.socket.emit('WEBRTC_ANSWER', {
+        callId,
+        targetUserId,
+        answer,
+      });
+    }
+  }
+
+  sendWebRtcIceCandidate({ callId, targetUserId, candidate }) {
+    if (this.socket) {
+      this.socket.emit('WEBRTC_ICE_CANDIDATE', {
+        callId,
+        targetUserId,
+        to: targetUserId,
+        candidate,
+      });
+    }
   }
 }
 

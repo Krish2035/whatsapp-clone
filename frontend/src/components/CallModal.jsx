@@ -16,6 +16,9 @@ export default function CallModal() {
     endCall,
     toggleMute,
     toggleCamera,
+    availableCameras,
+    activeCameraId,
+    switchCameraDevice,
   } = useCall();
 
   const [isMinimized, setIsMinimized] = useState(false);
@@ -28,43 +31,36 @@ export default function CallModal() {
   const remoteAudioRef = useRef(null);
   const timerRef = useRef(null);
 
-  // Bind local video stream to DOM
+  // Bind local video stream to DOM element
   useEffect(() => {
     if (localStream && localVideoRef.current) {
       localVideoRef.current.srcObject = localStream;
-      localVideoRef.current.play().catch(e => console.warn('Local video play warning:', e));
+      localVideoRef.current.play().catch((e) => console.warn('Local video play warning:', e));
     }
   }, [localStream, callStatus]);
 
-  // Remote stream - bind video to DOM; audio is handled by webrtcService module-level element
+  // Bind remote stream to DOM element
   useEffect(() => {
     if (remoteStream) {
       const audioTracks = remoteStream.getAudioTracks();
-      console.log('CallModal: Remote stream received. Audio tracks:', audioTracks.length);
-
-      // Enable all audio tracks
-      audioTracks.forEach(t => {
+      audioTracks.forEach((t) => {
         t.enabled = true;
       });
 
-      // Bind video to video element
       if (remoteVideoRef.current) {
         remoteVideoRef.current.srcObject = remoteStream;
-        remoteVideoRef.current.play().catch(e => console.warn('Remote video play warning:', e));
+        remoteVideoRef.current.play().catch((e) => console.warn('Remote video play warning:', e));
       }
-      // Also bind audio to in-DOM audio element as double fallback
       if (remoteAudioRef.current) {
         remoteAudioRef.current.srcObject = remoteStream;
         remoteAudioRef.current.volume = 1.0;
         remoteAudioRef.current.muted = false;
-        remoteAudioRef.current.play().then(() => {
-          console.log('CallModal: ✅ Fallback audio element playing!');
-        }).catch(e => console.warn('Fallback audio play:', e.name));
+        remoteAudioRef.current.play().catch((e) => console.warn('Fallback audio play:', e.name));
       }
     }
   }, [remoteStream, callStatus]);
 
-  // When call becomes connected - retry audio play (catches autoplay deferred cases)
+  // Call duration timer
   useEffect(() => {
     if (callStatus === 'connected') {
       setCallDuration(0);
@@ -72,7 +68,6 @@ export default function CallModal() {
         setCallDuration((prev) => prev + 1);
       }, 1000);
 
-      // Retry audio play - user gesture already happened on accept click
       if (remoteAudioRef.current && remoteAudioRef.current.srcObject) {
         remoteAudioRef.current.play().catch(() => {});
       }
@@ -146,8 +141,9 @@ export default function CallModal() {
           fontSize: '14px',
           transition: 'all 0.2s ease',
         }}
+        aria-label="Expand Call Window"
       >
-        <span style={{ fontSize: '18px' }}>📞</span>
+        <span style={{ fontSize: '18px' }}>{isVideoCall ? '📹' : '📞'}</span>
         <span>{peerInfo?.name || 'WhatsApp Call'}</span>
         <span style={{ opacity: 0.8, fontSize: '13px' }}>
           {isConnected ? formatDuration(callDuration) : isCalling ? 'Ringing...' : 'Incoming...'}
@@ -165,6 +161,7 @@ export default function CallModal() {
             cursor: 'pointer',
             marginLeft: '4px',
           }}
+          aria-label="Maximize Call Window"
         >
           ⤢
         </button>
@@ -193,7 +190,7 @@ export default function CallModal() {
         overflow: 'hidden',
       }}
     >
-      {/* Persistent Audio Player for Remote Voice Output - in-layout (visibility hidden avoids mobile power manager muting) */}
+      {/* Persistent Audio Player for Remote Voice Output */}
       <audio
         ref={remoteAudioRef}
         autoPlay
@@ -232,6 +229,7 @@ export default function CallModal() {
             transition: 'background 0.2s',
           }}
           title="Minimize Call"
+          aria-label="Minimize Call"
         >
           ↙️
         </button>
@@ -252,26 +250,32 @@ export default function CallModal() {
           </p>
         </div>
 
-        {/* Add Participant Button */}
-        <button
-          style={{
-            width: '44px',
-            height: '44px',
-            borderRadius: '50%',
-            backgroundColor: 'rgba(255, 255, 255, 0.08)',
-            border: 'none',
-            color: '#e9edef',
-            fontSize: '18px',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            flexShrink: 0,
-          }}
-          title="Add Participant"
-        >
-          👤+
-        </button>
+        {/* Camera Switcher Dropdown (If multiple cameras available) */}
+        {isVideoCall && availableCameras.length > 1 ? (
+          <select
+            value={activeCameraId || ''}
+            onChange={(e) => switchCameraDevice(e.target.value)}
+            style={{
+              backgroundColor: 'rgba(255, 255, 255, 0.1)',
+              color: '#e9edef',
+              border: 'none',
+              borderRadius: '12px',
+              padding: '6px 10px',
+              fontSize: '12px',
+              cursor: 'pointer',
+              outline: 'none',
+            }}
+            aria-label="Select Camera Input Device"
+          >
+            {availableCameras.map((cam, idx) => (
+              <option key={cam.deviceId || idx} value={cam.deviceId} style={{ backgroundColor: '#111b21', color: '#e9edef' }}>
+                {cam.label || `Camera ${idx + 1}`}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <div style={{ width: '44px' }} />
+        )}
       </div>
 
       {/* 2. Main Center Body Display */}
@@ -287,7 +291,7 @@ export default function CallModal() {
         }}
       >
         {isVideoCall && isConnected ? (
-          /* Video Stream Display Container */
+          /* Video Stream Display Container (WhatsApp Responsive Layout) */
           <div
             style={{
               position: 'relative',
@@ -302,9 +306,10 @@ export default function CallModal() {
               border: '1px solid rgba(255, 255, 255, 0.08)',
               display: 'flex',
               alignItems: 'center',
-              justifyContent: 'center'
+              justifyContent: 'center',
             }}
           >
+            {/* Primary Remote Video Stream */}
             <video
               ref={remoteVideoRef}
               autoPlay
@@ -314,7 +319,7 @@ export default function CallModal() {
                 height: '100%',
                 objectFit: 'cover',
                 backgroundColor: '#111b21',
-                display: remoteStream ? 'block' : 'none'
+                display: remoteStream ? 'block' : 'none',
               }}
             />
             {!remoteStream && (
@@ -324,7 +329,7 @@ export default function CallModal() {
               </div>
             )}
 
-            {/* PIP Local Video Track */}
+            {/* Floating PIP Local Video Stream */}
             <div
               style={{
                 position: 'absolute',
@@ -350,7 +355,7 @@ export default function CallModal() {
             </div>
           </div>
         ) : (
-          /* WhatsApp Circular Avatar Design (Matching Screenshot 1) */
+          /* Voice Call Circular Avatar Display */
           <div
             style={{
               position: 'relative',
@@ -384,7 +389,7 @@ export default function CallModal() {
         )}
       </div>
 
-      {/* 3. Bottom Control Panel Card (Matching WhatsApp Mobile Screenshot 1) */}
+      {/* 3. Bottom Control Panel Card */}
       <div
         style={{
           width: '100%',
@@ -426,6 +431,7 @@ export default function CallModal() {
                   transition: 'transform 0.15s',
                 }}
                 title="Accept Call"
+                aria-label="Accept Call"
               >
                 📞
               </button>
@@ -453,6 +459,7 @@ export default function CallModal() {
                   transition: 'transform 0.15s',
                 }}
                 title="Decline Call"
+                aria-label="Decline Call"
               >
                 📵
               </button>
@@ -460,11 +467,11 @@ export default function CallModal() {
             </div>
           </div>
         ) : (
-          /* Active Call Control Buttons Grid (2 Rows of 3 Icons with Labels) */
+          /* Active Call Control Buttons Grid */
           <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
             {/* Row 1: Audio | Video | Mute */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 12px' }}>
-              {/* Audio / Speaker Toggle */}
+              {/* Speaker / Audio Output Toggle */}
               <div style={{ textAlign: 'center' }}>
                 <button
                   onClick={() => setIsSpeakerOn(!isSpeakerOn)}
@@ -484,14 +491,15 @@ export default function CallModal() {
                     boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
                     transition: 'all 0.2s',
                   }}
-                  title="Audio Output"
+                  title="Toggle Audio Speaker"
+                  aria-label={isSpeakerOn ? 'Speaker On' : 'Speaker Off'}
                 >
                   ᛒ
                 </button>
-                <span style={{ fontSize: '12px', color: '#8696a0' }}>Audio</span>
+                <span style={{ fontSize: '12px', color: '#8696a0' }}>{isSpeakerOn ? 'Speaker' : 'Audio'}</span>
               </div>
 
-              {/* Video Toggle */}
+              {/* Video Camera Toggle */}
               <div style={{ textAlign: 'center' }}>
                 <button
                   onClick={toggleCamera}
@@ -511,11 +519,12 @@ export default function CallModal() {
                     boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
                     transition: 'all 0.2s',
                   }}
-                  title="Toggle Camera"
+                  title={isCamOff ? 'Turn Camera On' : 'Turn Camera Off'}
+                  aria-label={isCamOff ? 'Turn Camera On' : 'Turn Camera Off'}
                 >
                   📹
                 </button>
-                <span style={{ fontSize: '12px', color: '#8696a0' }}>Video</span>
+                <span style={{ fontSize: '12px', color: '#8696a0' }}>{isCamOff ? 'Cam Off' : 'Cam On'}</span>
               </div>
 
               {/* Mute Microphone */}
@@ -538,17 +547,18 @@ export default function CallModal() {
                     boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
                     transition: 'all 0.2s',
                   }}
-                  title={isMuted ? 'Unmute' : 'Mute'}
+                  title={isMuted ? 'Unmute Microphone' : 'Mute Microphone'}
+                  aria-label={isMuted ? 'Unmute Microphone' : 'Mute Microphone'}
                 >
                   {isMuted ? '🔇' : '🎙️'}
                 </button>
-                <span style={{ fontSize: '12px', color: '#8696a0' }}>Mute</span>
+                <span style={{ fontSize: '12px', color: '#8696a0' }}>{isMuted ? 'Muted' : 'Mute'}</span>
               </div>
             </div>
 
-            {/* Row 2: More | Share | End */}
+            {/* Row 2: Options | Share | End */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 12px' }}>
-              {/* More Options */}
+              {/* Options */}
               <div style={{ textAlign: 'center' }}>
                 <button
                   style={{
@@ -567,6 +577,7 @@ export default function CallModal() {
                     boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
                   }}
                   title="More Options"
+                  aria-label="More Options"
                 >
                   •••
                 </button>
@@ -594,10 +605,11 @@ export default function CallModal() {
                     transition: 'all 0.2s',
                   }}
                   title="Share Screen"
+                  aria-label="Share Screen"
                 >
                   ⬆️
                 </button>
-                <span style={{ fontSize: '12px', color: '#8696a0' }}>Share</span>
+                <span style={{ fontSize: '12px', color: '#8696a0' }}>{isSharing ? 'Sharing' : 'Share'}</span>
               </div>
 
               {/* End Call Button */}
@@ -621,6 +633,7 @@ export default function CallModal() {
                     transition: 'transform 0.15s',
                   }}
                   title="End Call"
+                  aria-label="End Call"
                 >
                   📞
                 </button>

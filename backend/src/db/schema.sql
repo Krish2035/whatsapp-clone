@@ -87,3 +87,29 @@ CREATE TABLE IF NOT EXISTS status_reactions (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
   UNIQUE(status_id, user_id)
 );
+
+-- WhatsApp Voice & Video Calls Feature Table
+CREATE TABLE IF NOT EXISTS calls (
+  id SERIAL PRIMARY KEY,
+  caller_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  receiver_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  conversation_id INTEGER REFERENCES chats(id) ON DELETE SET NULL,
+  call_type VARCHAR(10) NOT NULL DEFAULT 'voice' CHECK (call_type IN ('voice', 'video', 'audio')),
+  status VARCHAR(20) NOT NULL DEFAULT 'initiated' CHECK (status IN ('initiated', 'calling', 'ringing', 'accepted', 'connected', 'rejected', 'missed', 'cancelled', 'ended', 'busy', 'failed')),
+  started_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  answered_at TIMESTAMP WITH TIME ZONE DEFAULT NULL,
+  ended_at TIMESTAMP WITH TIME ZONE DEFAULT NULL,
+  duration_seconds INTEGER DEFAULT 0 CHECK (duration_seconds >= 0),
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT chk_different_users CHECK (caller_id <> receiver_id)
+);
+
+-- Performance Indexes for Call Logs & Queries
+CREATE INDEX IF NOT EXISTS idx_calls_caller_id ON calls(caller_id);
+CREATE INDEX IF NOT EXISTS idx_calls_receiver_id ON calls(receiver_id);
+CREATE INDEX IF NOT EXISTS idx_calls_created_at ON calls(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_calls_status ON calls(receiver_id, status);
+CREATE INDEX IF NOT EXISTS idx_calls_conversation ON calls(conversation_id);
+
+

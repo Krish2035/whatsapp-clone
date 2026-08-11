@@ -179,3 +179,29 @@ export async function reactToStatus(statusId, emoji) {
     body: JSON.stringify({ emoji }),
   });
 }
+
+// ── Call API ──────────────────────────────────────────────────────────────
+
+export async function fetchCalls() {
+  const data = await apiFetch('/calls', { headers: getAuthHeaders() });
+  return data.calls || [];
+}
+
+export async function createCallRecord(receiverId, conversationId = null, callType = 'audio') {
+  const data = await apiFetch('/calls', {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify({ receiverId, conversationId, callType }),
+  });
+  return data.call;
+}
+
+export async function updateCallStatus(callId, status, duration_seconds = 0) {
+  const data = await apiFetch(`/calls/${callId}`, {
+    method: 'PUT',
+    headers: getAuthHeaders(),
+    body: JSON.stringify({ status, duration_seconds }),
+  });
+  return data.call;
+}
+

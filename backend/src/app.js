@@ -11,6 +11,7 @@ const messageRoutes = require('./routes/messageRoutes');
 const mediaRoutes = require('./routes/mediaRoutes');
 const aiRoutes = require('./routes/aiRoutes');
 const statusRoutes = require('./routes/statusRoutes');
+const callRoutes = require('./routes/callRoutes');
 const errorHandler = require('./middlewares/errorHandler');
 
 const app = express();
@@ -50,6 +51,7 @@ app.use('/api/media', mediaRoutes);
 app.use('/api/upload', mediaRoutes); // alias for backwards compatibility
 app.use('/api/ai', aiRoutes);
 app.use('/api/statuses', statusRoutes);
+app.use('/api/calls', callRoutes);
 
 // Global Error Handling Middleware
 app.use(errorHandler);

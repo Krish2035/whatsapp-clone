@@ -1,0 +1,28 @@
+# Dependencies
+node_modules/
+
+# Local Environment & Secrets
+.env
+.env.local
+.env.production
+*.env
+
+# SQLite local dev database
+*.db
+*.sqlite
+
+# Uploads directory
+uploads/
+!uploads/.gitkeep
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+logs/
+*.log
+
+# OS / IDE files
+.DS_Store
+.vscode/
+.idea/

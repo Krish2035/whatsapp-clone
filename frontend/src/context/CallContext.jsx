@@ -2,19 +2,11 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from './AuthContext';
 import { CallContext } from './CallContextInstance';
 import { socketService } from '../services/socket';
-import { agoraService } from '../services/agoraService';
 import { webrtcService } from '../services/webrtcService';
 import { ringtoneService } from '../services/ringtoneService';
-import { firebaseService } from '../services/firebaseService';
+import { fetchCalls, createCallRecord, updateCallStatus as apiUpdateCallStatus } from '../services/api';
 
 export { CallContext };
-
-const INITIAL_LOGS = [
-  { id: 'log-1', name: 'HM HR Infotech', type: 'incoming', isVideo: false, time: '4:14 pm', avatar: 'HM' },
-  { id: 'log-2', name: 'Padashala Parivar', type: 'missed', isVideo: true, time: 'Wednesday', avatar: '😍' },
-  { id: 'log-3', name: 'Priyanshi', type: 'missed', isVideo: false, time: '23/7/2026', avatar: 'P' },
-  { id: 'log-4', name: 'Priyanshi', type: 'outgoing', isVideo: false, time: '8/7/2026', avatar: 'P' },
-];
 
 export function CallProvider({ children }) {
   const { user: authUser } = useAuth();
@@ -30,43 +22,147 @@ export function CallProvider({ children }) {
   };
 
   const user = getUser();
-  
+
   // Call status: 'idle' | 'calling' | 'incoming' | 'connected'
   const [callStatus, setCallStatus] = useState('idle');
   const [channelName, setChannelName] = useState(null);
-  const [peerInfo, setPeerInfo] = useState(null); // { id, name, isVideo }
+  const [peerInfo, setPeerInfo] = useState(null); // { id, name, avatar, isVideo }
   const [isVideoCall, setIsVideoCall] = useState(true);
-  
+
   // Audio/Video control states
   const [isMuted, setIsMuted] = useState(false);
   const [isCamOff, setIsCamOff] = useState(false);
-  
+
+  // Available camera input devices
+  const [availableCameras, setAvailableCameras] = useState([]);
+  const [activeCameraId, setActiveCameraId] = useState(null);
+
   // MediaStreams for audio & video
   const [localStream, setLocalStream] = useState(null);
   const [remoteStream, setRemoteStream] = useState(null);
   const [incomingOffer, setIncomingOffer] = useState(null);
 
-  // Call Logs History
-  const [callLogs, setCallLogs] = useState(() => {
-    try {
-      const saved = localStorage.getItem('wa_call_logs');
-      return saved ? JSON.parse(saved) : INITIAL_LOGS;
-    } catch {
-      return INITIAL_LOGS;
-    }
-  });
+  // Ready flags
+  const [isLocalVideoReady, setIsLocalVideoReady] = useState(false);
+  const [isRemoteVideoReady, setIsRemoteVideoReady] = useState(false);
+
+  // Call Timer & Call History Logs
+  const [callDuration, setCallDuration] = useState(0);
+  const [callLogs, setCallLogs] = useState([]);
 
   const activePeerIdRef = useRef(null);
-  const roomIdRef = useRef(null);
+  const activeCallIdRef = useRef(null);
   const callStatusRef = useRef(callStatus);
   const incomingOfferRef = useRef(null);
+  const durationTimerRef = useRef(null);
 
   // Sync callStatusRef continuously for closure safety
   useEffect(() => {
     callStatusRef.current = callStatus;
   }, [callStatus]);
 
-  // Incoming Call Ringtone Lifecycle (Receiver Device Only)
+  // Load call history from backend API on mount / login
+  useEffect(() => {
+    if (user?.id) {
+      loadCallHistory();
+    }
+  }, [user?.id]);
+
+  // Connection state callback handling
+  useEffect(() => {
+    webrtcService.setConnectionStateCallback((state) => {
+      console.log(`CallContext: WebRTC connection state -> ${state}`);
+      if (state === 'failed') {
+        console.warn('CallContext: WebRTC connection permanently failed. Terminating call...');
+        endCall();
+      }
+    });
+  }, []);
+
+  const loadCallHistory = async () => {
+    try {
+      const dbCalls = await fetchCalls();
+      if (Array.isArray(dbCalls)) {
+        const formatted = dbCalls.map((c) => {
+          const isOutgoing = String(c.caller_id) === String(user?.id);
+          const otherName = isOutgoing ? c.receiver_name : c.caller_name;
+          const otherAvatar = isOutgoing ? c.receiver_avatar : c.caller_avatar;
+          let logType = isOutgoing ? 'outgoing' : 'incoming';
+          if (c.status === 'missed' || c.status === 'rejected') {
+            logType = isOutgoing ? 'outgoing' : 'missed';
+          }
+          return {
+            id: `call-${c.id}`,
+            dbId: c.id,
+            name: otherName || 'WhatsApp Contact',
+            type: logType,
+            status: c.status,
+            isVideo: c.call_type === 'video',
+            time: new Date(c.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            date: new Date(c.created_at).toLocaleDateString(),
+            durationSeconds: c.duration_seconds || 0,
+            avatar: otherAvatar || (otherName ? otherName.charAt(0).toUpperCase() : 'U'),
+          };
+        });
+        setCallLogs(formatted);
+      }
+    } catch (err) {
+      console.warn('Failed to load call history from database:', err.message);
+    }
+  };
+
+  // Enumerate cameras when call is active
+  useEffect(() => {
+    if (isVideoCall && (callStatus === 'calling' || callStatus === 'connected')) {
+      webrtcService.getAvailableCameras().then((cams) => {
+        setAvailableCameras(cams);
+        if (cams.length > 0 && !activeCameraId) {
+          setActiveCameraId(cams[0].deviceId);
+        }
+      });
+    }
+  }, [isVideoCall, callStatus]);
+
+  // Update track ready flags
+  useEffect(() => {
+    if (localStream) {
+      const hasVideo = localStream.getVideoTracks().some((t) => t.readyState === 'live');
+      setIsLocalVideoReady(hasVideo);
+    } else {
+      setIsLocalVideoReady(false);
+    }
+  }, [localStream]);
+
+  useEffect(() => {
+    if (remoteStream) {
+      const hasVideo = remoteStream.getVideoTracks().some((t) => t.readyState === 'live');
+      setIsRemoteVideoReady(hasVideo);
+    } else {
+      setIsRemoteVideoReady(false);
+    }
+  }, [remoteStream]);
+
+  // Call Timer Lifecycle - Starts strictly when call reaches connected state
+  useEffect(() => {
+    if (callStatus === 'connected') {
+      setCallDuration(0);
+      durationTimerRef.current = setInterval(() => {
+        setCallDuration((prev) => prev + 1);
+      }, 1000);
+    } else {
+      if (durationTimerRef.current) {
+        clearInterval(durationTimerRef.current);
+        durationTimerRef.current = null;
+      }
+    }
+    return () => {
+      if (durationTimerRef.current) {
+        clearInterval(durationTimerRef.current);
+      }
+    };
+  }, [callStatus]);
+
+  // Ringtone Lifecycle
   useEffect(() => {
     if (callStatus === 'incoming') {
       console.log('CallContext: Incoming status active -> Triggering ringtone');
@@ -74,7 +170,6 @@ export function CallProvider({ children }) {
     } else {
       ringtoneService.stopRingtone();
     }
-
     return () => {
       ringtoneService.stopRingtone();
     };
@@ -87,56 +182,12 @@ export function CallProvider({ children }) {
     }
   }, [remoteStream]);
 
-  // Save logs to localStorage
-  useEffect(() => {
-    try {
-      localStorage.setItem('wa_call_logs', JSON.stringify(callLogs));
-    } catch (e) {
-      console.error('Failed to save call logs', e);
-    }
-  }, [callLogs]);
-
-  // Ensure socket connection & online mapping whenever user state resolves
+  // Ensure socket connection whenever user resolves
   useEffect(() => {
     const activeUser = getUser();
     if (activeUser?.id) {
       socketService.connect(activeUser.id);
     }
-  }, [user?.id]);
-
-  // Firebase Realtime Incoming Call Room Listener
-  useEffect(() => {
-    const activeUser = getUser();
-    if (!activeUser?.id) return;
-    const unsubscribeFirebase = firebaseService.listenForIncomingCalls(activeUser.id, (callRoom) => {
-      console.log('CallContext: Raw Firebase incoming call room:', callRoom);
-      if (String(callRoom.callerId) === String(activeUser.id)) return;
-
-      if (callStatusRef.current === 'incoming' && activePeerIdRef.current === String(callRoom.callerId)) {
-        console.log('CallContext: Duplicate Firebase incoming call room ignored.');
-        return;
-      }
-
-      console.log('CallContext: ✅ FIREBASE INCOMING CALL ACCEPTED! Setting callStatus to incoming for:', callRoom.callerName);
-
-      setChannelName(callRoom.id);
-      setPeerInfo({ id: callRoom.callerId, name: callRoom.callerName });
-      setIsVideoCall(callRoom.isVideo);
-      if (callRoom.offer) {
-        setIncomingOffer(callRoom.offer);
-        incomingOfferRef.current = callRoom.offer;
-      }
-      setCallStatus('incoming');
-      activePeerIdRef.current = String(callRoom.callerId);
-
-      firebaseService.listenForCandidates(callRoom.id, 'callerCandidates', async (candidate) => {
-        await webrtcService.addIceCandidate(candidate);
-      });
-    });
-
-    return () => {
-      if (unsubscribeFirebase) unsubscribeFirebase();
-    };
   }, [user?.id]);
 
   // Socket Signaling Listener
@@ -146,48 +197,36 @@ export function CallProvider({ children }) {
     const socket = socketService.connect(activeUser.id);
     if (!socket) return;
 
-    // 1. Handle Incoming Call with robust ID & Username matching and closure safety
+    // 1. Handle Incoming Call Signal
     const handleIncomingCall = (data) => {
       console.log('CallContext: Raw socket call_user signal received:', data);
-      const { userToCall, channelName: channel, signal, from, fromName, isVideo } = data || {};
+      const { userToCall, channelName: channel, signal, from, fromName, isVideo, callId } = data || {};
       const currentUser = getUser();
-      
-      // Do not process self loopback calls
+
       if (currentUser?.id && String(from) === String(currentUser.id)) {
-        console.log('CallContext: Ignored self loopback call');
         return;
       }
 
-      // Target recipient match logic (supports numeric ID, string ID, and username)
       if (userToCall) {
         const myId = String(currentUser?.id || '').trim();
-        const myName = String(currentUser?.username || '').toLowerCase().trim();
-        const myEmail = String(currentUser?.email || '').toLowerCase().trim();
         const targetVal = String(userToCall || '').toLowerCase().trim();
-
-        const isIdMatch = Boolean(myId && (targetVal === myId || parseInt(targetVal, 10) === parseInt(myId, 10)));
-        const isNameMatch = Boolean(myName && targetVal === myName);
-        const isEmailMatch = Boolean(myEmail && targetVal === myEmail);
-
-        console.log(`CallContext: Target Match Check -> TargetVal: "${targetVal}", MyId: "${myId}", MyName: "${myName}" -> isIdMatch: ${isIdMatch}, isNameMatch: ${isNameMatch}`);
-
-        if (!isIdMatch && !isNameMatch && !isEmailMatch) {
-          console.warn('CallContext: Signal target user mismatch, skipping call modal.');
-          return;
-        }
+        const isMatch = myId && (targetVal === myId || parseInt(targetVal, 10) === parseInt(myId, 10));
+        if (!isMatch) return;
       }
 
-      // Deduplicate if already ringing for this exact caller
       if (callStatusRef.current === 'incoming' && activePeerIdRef.current === String(from)) {
         if (signal && (signal.sdp || signal.type)) {
-          console.log('CallContext: Updating SDP offer for active incoming call.');
           setIncomingOffer(signal);
           incomingOfferRef.current = signal;
         }
         return;
       }
 
-      console.log('CallContext: ✅ INCOMING CALL ACCEPTED! Setting callStatus to incoming for caller:', fromName || from);
+      console.log('CallContext: ✅ INCOMING CALL RECEIVED from:', fromName || from);
+
+      if (callId) {
+        activeCallIdRef.current = callId;
+      }
 
       setChannelName(channel);
       setPeerInfo({ id: from, name: fromName || 'WhatsApp Contact' });
@@ -200,7 +239,7 @@ export function CallProvider({ children }) {
       activePeerIdRef.current = String(from);
     };
 
-    // 2. Handle Call Accepted by Callee
+    // 2. Handle Call Accepted Signal
     const handleCallAccepted = async (data) => {
       const answerSignal = data?.signal || data;
       const targetUser = data?.to;
@@ -209,15 +248,13 @@ export function CallProvider({ children }) {
       if (targetUser) {
         const myId = String(currentUser?.id || '');
         const targetId = String(targetUser);
-        const myName = String(currentUser?.username || '').toLowerCase().trim();
-        const targetName = targetId.toLowerCase().trim();
-        const isMatch = targetId === myId || parseInt(targetId, 10) === parseInt(myId, 10) || (myName && targetName === myName);
+        const isMatch = targetId === myId || parseInt(targetId, 10) === parseInt(myId, 10);
         if (!isMatch) return;
       }
 
       console.log('Call Accepted event received -> Setting callStatus to connected!');
       setCallStatus('connected');
-      
+
       try {
         if (answerSignal && (answerSignal.sdp || answerSignal.type)) {
           await webrtcService.handleAnswer(answerSignal);
@@ -225,14 +262,6 @@ export function CallProvider({ children }) {
       } catch (err) {
         console.error('Error setting remote answer:', err);
       }
-
-      addCallLog({
-        name: peerInfo?.name || 'WhatsApp Contact',
-        type: 'outgoing',
-        isVideo: isVideoCall,
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        avatar: peerInfo?.name ? peerInfo.name.charAt(0).toUpperCase() : 'U'
-      });
     };
 
     // 3. Handle ICE Candidates
@@ -244,9 +273,7 @@ export function CallProvider({ children }) {
       if (targetUser) {
         const myId = String(currentUser?.id || '');
         const targetId = String(targetUser);
-        const myName = String(currentUser?.username || '').toLowerCase().trim();
-        const targetName = targetId.toLowerCase().trim();
-        const isMatch = targetId === myId || parseInt(targetId, 10) === parseInt(myId, 10) || (myName && targetName === myName);
+        const isMatch = targetId === myId || parseInt(targetId, 10) === parseInt(myId, 10);
         if (!isMatch) return;
       }
 
@@ -255,60 +282,52 @@ export function CallProvider({ children }) {
       }
     };
 
-    // 4. Handle Call Rejected / Declined
+    // 4. Handle Call Rejected Signal
     const handleCallRejected = (data) => {
-      const targetUser = data?.to;
-      const currentUser = getUser();
-      if (targetUser) {
-        const myId = String(currentUser?.id || '');
-        const targetId = String(targetUser);
-        const myName = String(currentUser?.username || '').toLowerCase().trim();
-        const targetName = targetId.toLowerCase().trim();
-        const isMatch = targetId === myId || parseInt(targetId, 10) === parseInt(myId, 10) || (myName && targetName === myName);
-        if (!isMatch) return;
-      }
       console.log('Call Rejected event received');
       cleanupCall();
+      loadCallHistory();
     };
 
-    // 5. Handle Call Ended
+    // 5. Handle Call Ended Signal
     const handleCallEnded = (data) => {
-      const targetUser = data?.to;
-      const currentUser = getUser();
-      if (targetUser) {
-        const myId = String(currentUser?.id || '');
-        const targetId = String(targetUser);
-        const myName = String(currentUser?.username || '').toLowerCase().trim();
-        const targetName = targetId.toLowerCase().trim();
-        const isMatch = targetId === myId || parseInt(targetId, 10) === parseInt(myId, 10) || (myName && targetName === myName);
-        if (!isMatch) return;
-      }
       console.log('Call Ended event received');
       cleanupCall();
+      loadCallHistory();
+    };
+
+    // 6. Handle Media Toggle Sync
+    const handleMediaToggle = (data) => {
+      const { isMuted: peerMuted, isCamOff: peerCamOff } = data || {};
+      console.log(`Peer media toggle: muted=${peerMuted}, camOff=${peerCamOff}`);
     };
 
     socket.on('call_user', handleIncomingCall);
+    socket.on('CALL_INCOMING', handleIncomingCall);
     socket.on('call_accepted', handleCallAccepted);
+    socket.on('CALL_ACCEPTED', handleCallAccepted);
     socket.on('ice_candidate', handleIceCandidate);
+    socket.on('WEBRTC_ICE_CANDIDATE', handleIceCandidate);
     socket.on('call_rejected', handleCallRejected);
+    socket.on('CALL_REJECTED', handleCallRejected);
     socket.on('call_ended', handleCallEnded);
+    socket.on('CALL_ENDED', handleCallEnded);
+    socket.on('call_media_toggle', handleMediaToggle);
 
     return () => {
       socket.off('call_user', handleIncomingCall);
+      socket.off('CALL_INCOMING', handleIncomingCall);
       socket.off('call_accepted', handleCallAccepted);
+      socket.off('CALL_ACCEPTED', handleCallAccepted);
       socket.off('ice_candidate', handleIceCandidate);
+      socket.off('WEBRTC_ICE_CANDIDATE', handleIceCandidate);
       socket.off('call_rejected', handleCallRejected);
+      socket.off('CALL_REJECTED', handleCallRejected);
       socket.off('call_ended', handleCallEnded);
+      socket.off('CALL_ENDED', handleCallEnded);
+      socket.off('call_media_toggle', handleMediaToggle);
     };
   }, [user?.id]);
-
-  const addCallLog = (logEntry) => {
-    const newLog = {
-      id: `log-${Date.now()}`,
-      ...logEntry
-    };
-    setCallLogs((prev) => [newLog, ...prev]);
-  };
 
   const unlockAudioContext = () => {
     try {
@@ -323,11 +342,18 @@ export function CallProvider({ children }) {
     const activeUser = getUser();
     if (!activeUser || !recipient) return;
 
-    // Ensure socket is active and connected
     const socket = socketService.connect(activeUser.id);
 
-    // Synchronous media acquisition trigger in current click gesture loop
-    const streamPromise = webrtcService.getLocalStream(isVideo);
+    // Request MediaStream according to exact callType (voice -> audio only, video -> audio + video)
+    let stream = null;
+    try {
+      stream = await webrtcService.getLocalStream(isVideo);
+    } catch (mediaErr) {
+      console.error('Initiate call media error:', mediaErr);
+      alert(`Could not start ${isVideo ? 'video' : 'voice'} call: ${mediaErr.message || 'Permission denied'}`);
+      cleanupCall();
+      return;
+    }
 
     unlockAudioContext();
 
@@ -348,97 +374,59 @@ export function CallProvider({ children }) {
       return;
     }
 
-    console.log(`CallContext: Initiating call to target user ID: ${targetUserId} (${recipient.username || recipient.name})`);
-
     const peerName = recipient.group_name || recipient.username || recipient.name || 'WhatsApp Contact';
+    const peerAvatar = recipient.avatar_url || (peerName ? peerName.charAt(0).toUpperCase() : 'U');
     const roomId = `room_${activeUser.id}_${targetUserId}_${Date.now()}`;
 
-    setPeerInfo({ id: targetUserId, name: peerName });
+    setPeerInfo({ id: targetUserId, name: peerName, avatar: peerAvatar });
     setIsVideoCall(isVideo);
     setCallStatus('calling');
     activePeerIdRef.current = String(targetUserId);
-    roomIdRef.current = roomId;
     setChannelName(roomId);
     setIsMuted(false);
     setIsCamOff(!isVideo);
 
-    // ⚡ INSTANT SIGNALING EMISSION: Notify callee immediately so incoming call popup opens with zero latency!
-    if (socket) {
-      console.log(`CallContext: Instant call_user signal emitted to ${targetUserId}`);
-      socket.emit('call_user', {
-        userToCall: targetUserId,
-        channelName: roomId,
-        signalData: null,
-        from: activeUser.id,
-        fromName: activeUser.username || 'Friend',
-        isVideo,
-      });
+    let dbCall = null;
+    try {
+      dbCall = await createCallRecord(targetUserId, recipient.id && !String(recipient.id).startsWith('temp-') ? recipient.id : null, isVideo ? 'video' : 'voice');
+      if (dbCall && dbCall.id) {
+        activeCallIdRef.current = dbCall.id;
+      }
+    } catch (err) {
+      console.warn('Failed to record call creation in DB:', err.message);
     }
 
     try {
-      // 1. Await Local MediaStream
-      // 1. Await Local MediaStream
-      const stream = await streamPromise;
       setLocalStream(stream);
 
-      // 2. Create RTCPeerConnection FIRST (bind local tracks & candidate callbacks)
       webrtcService.createPeerConnection(
         (remStream) => {
-          console.log('CallContext: Remote Stream attached on caller side -> Setting callStatus to connected!');
+          console.log('CallContext: Remote Stream attached on caller side!');
           setRemoteStream(remStream);
           setCallStatus('connected');
         },
         (candidate) => {
-          if (candidate) {
-            if (socket) socket.emit('ice_candidate', { candidate, to: targetUserId });
-            if (roomIdRef.current) {
-              firebaseService.addIceCandidate(roomIdRef.current, candidate, 'callerCandidates');
-            }
+          if (candidate && socket) {
+            socket.sendWebRtcIceCandidate({ callId: activeCallIdRef.current, targetUserId, candidate });
           }
         }
       );
 
-      // 3. Create SDP Offer SECOND
       const offer = await webrtcService.createOffer();
 
-      if (!offer) {
-        console.error('CallContext: Failed to generate SDP offer!');
-        return;
-      }
-
-      // 4. Create Firebase Call Room
-      await firebaseService.createCallRoom(activeUser, { id: targetUserId, name: peerName }, isVideo, offer);
-
-      // 5. Listen for Callee Answer in Firebase
-      firebaseService.listenForAnswer(roomId, async (answer) => {
-        if (answer.type === 'answer' || answer.sdp) {
-          console.log('CallContext: Firebase call answer received -> Setting callStatus to connected!');
-          setCallStatus('connected');
-          await webrtcService.handleAnswer(answer);
-        } else if (answer.type === 'ended' || answer.status === 'ended' || answer.status === 'rejected') {
-          cleanupCall();
-        }
-      });
-
-      // 6. Listen for Callee ICE Candidates in Firebase
-      firebaseService.listenForCandidates(roomId, 'calleeCandidates', async (candidate) => {
-        await webrtcService.addIceCandidate(candidate);
-      });
-
-      // 7. Emit Socket.IO fallback signal with VALID SDP offer
       if (socket) {
-        console.log(`CallContext: Emitting call_user socket signal with valid SDP offer to ${targetUserId}`);
-        socket.emit('call_user', {
-          userToCall: targetUserId,
+        console.log(`CallContext: Emitting CALL_INITIATE signal with SDP offer to ${targetUserId}`);
+        socket.initiateCall({
+          receiverId: targetUserId,
+          callType: isVideo ? 'video' : 'voice',
+          conversationId: recipient.id && !String(recipient.id).startsWith('temp-') ? recipient.id : null,
           channelName: roomId,
           signalData: offer,
-          from: activeUser.id,
-          fromName: activeUser.username || 'Friend',
-          isVideo,
         });
       }
     } catch (err) {
-      console.warn('Initiate call warning:', err);
+      console.warn('Initiate call error:', err);
+      cleanupCall();
     }
   };
 
@@ -449,135 +437,131 @@ export function CallProvider({ children }) {
 
     const socket = socketService.connect(activeUser.id);
 
-    // CRITICAL: Stop ringtone and unlock AudioContext synchronously inside user-gesture
     ringtoneService.stopRingtone();
     unlockAudioContext();
+
+    // Request MediaStream according to incoming call type
+    let stream = null;
+    try {
+      stream = await webrtcService.getLocalStream(isVideoCall);
+    } catch (mediaErr) {
+      console.error('Accept call media error:', mediaErr);
+      alert(`Could not access ${isVideoCall ? 'camera/microphone' : 'microphone'}: ${mediaErr.message || 'Permission denied'}`);
+      rejectCall();
+      return;
+    }
 
     setCallStatus('connected');
     setIsMuted(false);
     setIsCamOff(!isVideoCall);
 
-    // ⚡ INSTANT ACCEPT SIGNAL: Notify caller immediately so caller transitions callStatus to 'connected'!
-    if (socket && activePeerIdRef.current) {
-      console.log('CallContext: Emitting instant answer_call signal to target:', activePeerIdRef.current);
-      socket.emit('answer_call', { to: activePeerIdRef.current, signal: null });
+    if (activeCallIdRef.current) {
+      try {
+        await apiUpdateCallStatus(activeCallIdRef.current, 'accepted');
+      } catch (e) {}
     }
 
-    // Synchronous media acquisition trigger in current click gesture loop
-    const streamPromise = webrtcService.getLocalStream(isVideoCall);
-
     try {
-      // 1. Await Local MediaStream
-      const stream = await streamPromise;
       setLocalStream(stream);
 
-      // 2. Create RTCPeerConnection and bind candidates
       webrtcService.createPeerConnection(
         (remStream) => {
-          console.log('CallContext: Remote Stream attached on accept side -> Setting callStatus to connected!');
+          console.log('CallContext: Remote Stream attached on accept side!');
           setRemoteStream(remStream);
           setCallStatus('connected');
         },
         (candidate) => {
-          if (candidate) {
-            if (socket && activePeerIdRef.current) {
-              socket.emit('ice_candidate', { candidate, to: activePeerIdRef.current });
-            }
-            if (channelName && channelName.startsWith('room_')) {
-              firebaseService.addIceCandidate(channelName, candidate, 'calleeCandidates');
-            }
+          if (candidate && socket && activePeerIdRef.current) {
+            socket.sendWebRtcIceCandidate({ callId: activeCallIdRef.current, targetUserId: activePeerIdRef.current, candidate });
           }
         }
       );
 
-      // 3. Resolve valid SDP offer (from state ref or Firebase call room document)
       let offerToUse = incomingOffer || incomingOfferRef.current;
-      if ((!offerToUse || !offerToUse.sdp) && channelName && channelName.startsWith('room_')) {
-        const roomData = await firebaseService.getCallRoom(channelName);
-        if (roomData && roomData.offer) {
-          offerToUse = roomData.offer;
-        }
-      }
-
       if (offerToUse) {
-        console.log('CallContext: Processing valid SDP offer to create WebRTC answer:', offerToUse);
+        console.log('CallContext: Creating WebRTC answer for offer');
         const answer = await webrtcService.handleOfferAndCreateAnswer(offerToUse);
 
-        // 4. Update Firebase Call Room Answer
-        if (channelName && channelName.startsWith('room_')) {
-          await firebaseService.answerCallRoom(channelName, answer);
-        }
-
-        // 5. Emit Socket.IO fallback signal
         if (socket && activePeerIdRef.current) {
-          socket.emit('answer_call', { to: activePeerIdRef.current, signal: answer });
+          socket.acceptCall({ callId: activeCallIdRef.current, callerId: activePeerIdRef.current, signal: answer });
         }
-      } else {
-        console.warn('CallContext: No valid SDP offer available during accept call!');
       }
-
-      addCallLog({
-        name: peerInfo?.name || 'WhatsApp Contact',
-        type: 'incoming',
-        isVideo: isVideoCall,
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        avatar: peerInfo?.name ? peerInfo.name.charAt(0).toUpperCase() : 'U'
-      });
     } catch (err) {
       console.warn('Accept call warning:', err);
     }
   };
 
   // Decline / Reject Incoming Call
-  const rejectCall = () => {
+  const rejectCall = async () => {
     ringtoneService.stopRingtone();
-    if (channelName && channelName.startsWith('room_')) {
-      firebaseService.endCallRoom(channelName, 'rejected');
-    }
     const socket = socketService.getSocket();
-    if (socket && activePeerIdRef.current) {
-      socket.emit('reject_call', { to: activePeerIdRef.current });
+
+    if (activeCallIdRef.current) {
+      try {
+        await apiUpdateCallStatus(activeCallIdRef.current, 'rejected', 0);
+      } catch (e) {}
     }
-    
-    addCallLog({
-      name: peerInfo?.name || 'WhatsApp Contact',
-      type: 'missed',
-      isVideo: isVideoCall,
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      avatar: peerInfo?.name ? peerInfo.name.charAt(0).toUpperCase() : 'U'
-    });
+
+    if (socket && activePeerIdRef.current) {
+      socket.rejectCall({ callId: activeCallIdRef.current, callerId: activePeerIdRef.current });
+    }
 
     cleanupCall();
+    loadCallHistory();
   };
 
   // End Ongoing Call
-  const endCall = () => {
+  const endCall = async () => {
     ringtoneService.stopRingtone();
-    if (channelName && channelName.startsWith('room_')) {
-      firebaseService.endCallRoom(channelName, 'ended');
-    }
     const socket = socketService.getSocket();
-    if (socket && activePeerIdRef.current) {
-      socket.emit('end_call', { to: activePeerIdRef.current });
+    const finalDuration = callDuration;
+
+    if (activeCallIdRef.current) {
+      try {
+        await apiUpdateCallStatus(activeCallIdRef.current, 'ended', finalDuration);
+      } catch (e) {}
     }
+
+    if (socket && activePeerIdRef.current) {
+      socket.endCall({ callId: activeCallIdRef.current, targetUserId: activePeerIdRef.current, durationSeconds: finalDuration });
+    }
+
     cleanupCall();
+    loadCallHistory();
   };
 
-  // Toggle Mute Audio
+  // Toggle Mute Audio (Independent Control)
   const toggleMute = () => {
     const nextMuted = !isMuted;
     setIsMuted(nextMuted);
     if (localStream) {
       localStream.getAudioTracks().forEach((t) => (t.enabled = !nextMuted));
     }
+    const socket = socketService.getSocket();
+    if (socket && activePeerIdRef.current) {
+      socket.emit('call_media_toggle', { to: activePeerIdRef.current, isMuted: nextMuted, isCamOff });
+    }
   };
 
-  // Toggle Camera
+  // Toggle Camera (Independent Control)
   const toggleCamera = () => {
     const nextCam = !isCamOff;
     setIsCamOff(nextCam);
     if (localStream) {
       localStream.getVideoTracks().forEach((t) => (t.enabled = !nextCam));
+    }
+    const socket = socketService.getSocket();
+    if (socket && activePeerIdRef.current) {
+      socket.emit('call_media_toggle', { to: activePeerIdRef.current, isMuted, isCamOff: nextCam });
+    }
+  };
+
+  // Switch Camera Device
+  const switchCameraDevice = async (targetDeviceId) => {
+    const success = await webrtcService.switchCamera(targetDeviceId);
+    if (success) {
+      setActiveCameraId(targetDeviceId);
+      setLocalStream(new MediaStream(webrtcService.localStream.getTracks()));
     }
   };
 
@@ -585,20 +569,21 @@ export function CallProvider({ children }) {
   const cleanupCall = () => {
     ringtoneService.stopRingtone();
     ringtoneService.cleanupRemoteAudio();
-    if (channelName && channelName.startsWith('room_')) {
-      firebaseService.endCallRoom(channelName, 'ended');
-    }
     webrtcService.cleanup();
-    agoraService.leave();
     setCallStatus('idle');
     setChannelName(null);
     setPeerInfo(null);
     setLocalStream(null);
     setRemoteStream(null);
     setIncomingOffer(null);
+    setCallDuration(0);
+    setIsMuted(false);
+    setIsCamOff(false);
+    setIsLocalVideoReady(false);
+    setIsRemoteVideoReady(false);
     incomingOfferRef.current = null;
     activePeerIdRef.current = null;
-    roomIdRef.current = null;
+    activeCallIdRef.current = null;
   };
 
   return (
@@ -610,17 +595,24 @@ export function CallProvider({ children }) {
         isVideoCall,
         isMuted,
         isCamOff,
+        isCameraEnabled: !isCamOff,
         localStream,
         remoteStream,
         incomingOffer,
+        isLocalVideoReady,
+        isRemoteVideoReady,
+        callDuration,
         callLogs,
+        availableCameras,
+        activeCameraId,
         initiateCall,
         acceptCall,
         rejectCall,
         endCall,
         toggleMute,
         toggleCamera,
-        addCallLog,
+        switchCameraDevice,
+        loadCallHistory,
       }}
     >
       {children}

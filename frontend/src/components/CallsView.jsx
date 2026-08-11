@@ -1,11 +1,17 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useCall } from '../context/useCall';
 
 export default function CallsView({ isMobile, onBack }) {
-  const { callLogs, initiateCall } = useCall();
+  const { callLogs, initiateCall, loadCallHistory } = useCall();
   const [searchQuery, setSearchQuery] = useState('');
   const [showCallPrompt, setShowCallPrompt] = useState(false);
   const [targetUser, setTargetUser] = useState('');
+
+  useEffect(() => {
+    if (loadCallHistory) {
+      loadCallHistory();
+    }
+  }, []);
 
   const filteredLogs = callLogs.filter(c => c.name.toLowerCase().includes(searchQuery.toLowerCase()));
 

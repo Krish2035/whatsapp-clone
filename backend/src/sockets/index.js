@@ -4,6 +4,7 @@ const pool = require('../config/db');
 const messageService = require('../services/messageService');
 const registerMessageHandlers = require('./messageSocket');
 const registerConversationHandlers = require('./conversationSocket');
+const registerCallHandlers = require('./callSocket');
 
 const onlineUsers = new Map(); // userId -> Set of socketIds
 
@@ -70,95 +71,7 @@ function initSockets(server) {
     // Register modular handlers
     registerMessageHandlers(io, socket, onlineUsers);
     registerConversationHandlers(io, socket, onlineUsers);
-
-    // Call Signaling Events (Direct target delivery + broadcast emission for 100% arrival rate)
-    socket.on('call_user', ({ userToCall, channelName, signalData, from, fromName, isVideo }) => {
-      console.log(`Socket Signaling: call_user from ${from} (${fromName}) to target ${userToCall}`);
-      const targetUserId = parseInt(userToCall, 10);
-
-      if (!isNaN(targetUserId)) {
-        const targetSocketIds = onlineUsers.get(targetUserId);
-        if (targetSocketIds && targetSocketIds.size > 0) {
-          targetSocketIds.forEach(socketId => {
-            if (socketId !== socket.id) {
-              io.to(socketId).emit('call_user', { userToCall, channelName, signal: signalData, from, fromName, isVideo });
-            }
-          });
-        }
-      }
-
-      // Broadcast to all sockets so recipient receives signal regardless of online map state
-      socket.broadcast.emit('call_user', { userToCall, channelName, signal: signalData, from, fromName, isVideo });
-    });
-
-    socket.on('answer_call', (data) => {
-      console.log(`Socket Signaling: answer_call to target ${data.to}`);
-      const targetUserId = parseInt(data.to, 10);
-
-      if (!isNaN(targetUserId)) {
-        const targetSocketIds = onlineUsers.get(targetUserId);
-        if (targetSocketIds && targetSocketIds.size > 0) {
-          targetSocketIds.forEach(socketId => {
-            if (socketId !== socket.id) {
-              io.to(socketId).emit('call_accepted', data);
-            }
-          });
-        }
-      }
-
-      socket.broadcast.emit('call_accepted', data);
-    });
-
-    socket.on('ice_candidate', (data) => {
-      const targetUserId = parseInt(data.to, 10);
-
-      if (!isNaN(targetUserId)) {
-        const targetSocketIds = onlineUsers.get(targetUserId);
-        if (targetSocketIds && targetSocketIds.size > 0) {
-          targetSocketIds.forEach(socketId => {
-            if (socketId !== socket.id) {
-              io.to(socketId).emit('ice_candidate', data);
-            }
-          });
-        }
-      }
-
-      socket.broadcast.emit('ice_candidate', data);
-    });
-
-    socket.on('reject_call', (data) => {
-      const targetUserId = parseInt(data.to, 10);
-
-      if (!isNaN(targetUserId)) {
-        const targetSocketIds = onlineUsers.get(targetUserId);
-        if (targetSocketIds && targetSocketIds.size > 0) {
-          targetSocketIds.forEach(socketId => {
-            if (socketId !== socket.id) {
-              io.to(socketId).emit('call_rejected', data);
-            }
-          });
-        }
-      }
-
-      socket.broadcast.emit('call_rejected', data);
-    });
-
-    socket.on('end_call', (data) => {
-      const targetUserId = parseInt(data.to, 10);
-
-      if (!isNaN(targetUserId)) {
-        const targetSocketIds = onlineUsers.get(targetUserId);
-        if (targetSocketIds && targetSocketIds.size > 0) {
-          targetSocketIds.forEach(socketId => {
-            if (socketId !== socket.id) {
-              io.to(socketId).emit('call_ended', data);
-            }
-          });
-        }
-      }
-
-      socket.broadcast.emit('call_ended', data);
-    });
+    registerCallHandlers(io, socket, onlineUsers);
 
     socket.on('disconnect', async () => {
       if (currentUserId && onlineUsers.has(currentUserId)) {

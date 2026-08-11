@@ -1,15 +1,10 @@
 /**
  * Native WebRTC PeerConnection Service
- * Root cause fix: uses a module-level <audio> element to bypass React async
- * rendering, which prevented remoteAudioRef.current.play() from being
- * called inside a user gesture context (Chrome/Safari autoplay policy).
+ * Handles 1-to-1 Voice & Video WebRTC connections
  */
 
 import { ringtoneService } from './ringtoneService';
 
-// Module-level audio element — exists outside React's render cycle
-// so it can be assigned srcObject the exact moment ontrack fires,
-// guaranteeing it's always within a user-activated audio context.
 let _remoteAudioEl = null;
 
 function getRemoteAudioEl() {
@@ -23,29 +18,43 @@ function getRemoteAudioEl() {
   return _remoteAudioEl;
 }
 
-const ICE_SERVERS = {
-  iceServers: [
-    { urls: 'stun:stun.l.google.com:19302' },
+function getIceServersConfig() {
+  const customStun = import.meta.env?.VITE_STUN_SERVER;
+  const customTurn = import.meta.env?.VITE_TURN_SERVER;
+  const customTurnUsername = import.meta.env?.VITE_TURN_USERNAME;
+  const customTurnCredential = import.meta.env?.VITE_TURN_CREDENTIAL;
+
+  const servers = [
+    { urls: customStun || 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
     { urls: 'stun:stun2.l.google.com:19302' },
-    { urls: 'stun:stun3.l.google.com:19302' },
-    { urls: 'stun:stun4.l.google.com:19302' },
-    { urls: 'stun:stun.services.mozilla.com' },
-    { urls: 'stun:global.stun.twilio.com:3478' },
-    {
+  ];
+
+  if (customTurn) {
+    servers.push({
+      urls: customTurn.includes(',') ? customTurn.split(',').map((u) => u.trim()) : customTurn,
+      username: customTurnUsername || '',
+      credential: customTurnCredential || '',
+    });
+  } else {
+    servers.push({
       urls: [
         'turn:openrelay.metered.ca:80',
         'turn:openrelay.metered.ca:443',
-        'turn:openrelay.metered.ca:443?transport=tcp'
+        'turn:openrelay.metered.ca:443?transport=tcp',
       ],
       username: 'openrelayproject',
-      credential: 'openrelayproject'
-    }
-  ],
-  iceCandidatePoolSize: 0,
-  bundlePolicy: 'max-bundle',
-  rtcpMuxPolicy: 'require'
-};
+      credential: 'openrelayproject',
+    });
+  }
+
+  return {
+    iceServers: servers,
+    iceCandidatePoolSize: 0,
+    bundlePolicy: 'max-bundle',
+    rtcpMuxPolicy: 'require',
+  };
+}
 
 export class WebRTCService {
   constructor() {
@@ -53,54 +62,109 @@ export class WebRTCService {
     this.localStream = null;
     this.remoteStream = null;
     this.pendingIceCandidates = [];
+    this.onConnectionStateChangeCallback = null;
   }
 
-  async getLocalStream(isVideo = true) {
+  setConnectionStateCallback(cb) {
+    this.onConnectionStateChangeCallback = cb;
+  }
+
+  async getAvailableCameras() {
+    if (typeof navigator === 'undefined' || !navigator.mediaDevices?.enumerateDevices) {
+      return [];
+    }
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      return devices.filter((d) => d.kind === 'videoinput');
+    } catch (e) {
+      console.warn('WebRTC: Error enumerating video devices:', e);
+      return [];
+    }
+  }
+
+  async getLocalStream(isVideo = false) {
     const hasLiveAudio = this.localStream?.getAudioTracks().some((t) => t.readyState === 'live');
     const hasLiveVideo = this.localStream?.getVideoTracks().some((t) => t.readyState === 'live');
 
-    // Return existing stream only if it satisfies the exact requirements
+    // Return existing stream only if it satisfies the exact call type requirements
     if (this.localStream && hasLiveAudio && (!isVideo || hasLiveVideo)) {
       this.localStream.getTracks().forEach((t) => (t.enabled = true));
       return this.localStream;
     }
 
-    // Stop any stale stream before acquiring new one
+    // Stop any stale stream before acquiring new media
     if (this.localStream) {
       this.localStream.getTracks().forEach((track) => track.stop());
       this.localStream = null;
     }
 
     if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
-      console.warn('WebRTC: getUserMedia unsupported');
-      this.localStream = new MediaStream();
-      return this.localStream;
+      const error = new Error('Browser does not support navigator.mediaDevices.getUserMedia');
+      error.name = 'NotSupportedError';
+      throw error;
     }
+
+    const audioConstraints = {
+      echoCancellation: true,
+      noiseSuppression: true,
+      autoGainControl: true,
+    };
+
+    // STRICT PERMISSION SCOPING: Request camera ONLY when callType is video
+    const videoConstraints = isVideo ? { facingMode: 'user' } : false;
+
+    console.log(`WebRTC: Requesting getUserMedia -> Audio: true, Video: ${Boolean(videoConstraints)}`);
 
     try {
       this.localStream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-        },
-        video: isVideo ? { facingMode: 'user' } : false
+        audio: audioConstraints,
+        video: videoConstraints,
       });
-      console.log('WebRTC: ✅ Acquired media stream. Tracks:', this.localStream.getTracks().map(t => t.kind));
+      console.log('WebRTC: ✅ Acquired local MediaStream. Tracks:', this.localStream.getTracks().map((t) => t.kind));
       this.localStream.getTracks().forEach((t) => (t.enabled = true));
       return this.localStream;
     } catch (err) {
-      console.warn('WebRTC: Full media failed, trying audio-only:', err.name);
-      try {
-        this.localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-        console.log('WebRTC: ✅ Acquired audio-only stream');
-        this.localStream.getTracks().forEach((t) => (t.enabled = true));
-        return this.localStream;
-      } catch (audioErr) {
-        console.warn('WebRTC: Microphone access denied:', audioErr.name);
-        this.localStream = new MediaStream();
-        return this.localStream;
+      console.error(`WebRTC: Media acquisition failed (${err.name}):`, err.message);
+
+      // Clean up any partially acquired tracks
+      if (this.localStream) {
+        this.localStream.getTracks().forEach((t) => t.stop());
+        this.localStream = null;
       }
+      throw err;
+    }
+  }
+
+  async switchCamera(targetDeviceId) {
+    if (!this.peerConnection || !this.localStream) {
+      console.warn('WebRTC: Cannot switch camera without an active local stream and PeerConnection');
+      return false;
+    }
+
+    try {
+      const newStream = await navigator.mediaDevices.getUserMedia({
+        video: { deviceId: { exact: targetDeviceId } },
+      });
+      const newVideoTrack = newStream.getVideoTracks()[0];
+      const oldVideoTrack = this.localStream.getVideoTracks()[0];
+
+      if (oldVideoTrack) {
+        this.localStream.removeTrack(oldVideoTrack);
+        oldVideoTrack.stop();
+      }
+      this.localStream.addTrack(newVideoTrack);
+
+      // Use RTCRtpSender.replaceTrack to swap video track on active RTCPeerConnection
+      const senders = this.peerConnection.getSenders();
+      const videoSender = senders.find((s) => s.track && s.track.kind === 'video');
+      if (videoSender) {
+        await videoSender.replaceTrack(newVideoTrack);
+        console.log('WebRTC: ✅ Camera track replaced via replaceTrack');
+      }
+      return true;
+    } catch (err) {
+      console.error('WebRTC: Failed to switch camera track:', err);
+      return false;
     }
   }
 
@@ -110,22 +174,27 @@ export class WebRTCService {
     }
 
     console.log('WebRTC: Creating new RTCPeerConnection');
-    this.peerConnection = new RTCPeerConnection(ICE_SERVERS);
+    this.peerConnection = new RTCPeerConnection(getIceServersConfig());
     this.pendingIceCandidates = [];
 
-    // Debug connection state changes
+    // Connection state monitoring
     this.peerConnection.onconnectionstatechange = () => {
-      console.log('WebRTC: connectionState ->', this.peerConnection?.connectionState);
+      const state = this.peerConnection?.connectionState;
+      console.log('WebRTC: connectionState ->', state);
+      if (this.onConnectionStateChangeCallback) {
+        this.onConnectionStateChangeCallback(state);
+      }
     };
+
     this.peerConnection.oniceconnectionstatechange = () => {
       console.log('WebRTC: iceConnectionState ->', this.peerConnection?.iceConnectionState);
     };
+
     this.peerConnection.onsignalingstatechange = () => {
       console.log('WebRTC: signalingState ->', this.peerConnection?.signalingState);
     };
 
-    // CRITICAL FIX: Assign audio stream directly to module-level audio element
-    // the instant the remote track arrives — no React render cycle involved.
+    // On remote track arrival
     this.peerConnection.ontrack = (event) => {
       console.log('WebRTC: ✅ Remote track received:', event.track.kind, '| streams:', event.streams.length);
       event.track.enabled = true;
@@ -136,20 +205,16 @@ export class WebRTCService {
       this.remoteStream = stream;
 
       if (event.track.kind === 'audio') {
-        // Direct DOM assignment — bypasses React state/render cycle entirely
         const audioEl = getRemoteAudioEl();
         audioEl.srcObject = stream;
         audioEl.volume = 1.0;
         audioEl.muted = false;
-        audioEl.play().then(() => {
-          console.log('WebRTC: ✅ Remote audio playing via module-level audio element!');
-        }).catch((e) => {
-          console.warn('WebRTC: Audio autoplay blocked, will retry on unmute:', e.name);
+        audioEl.play().catch((e) => {
+          console.warn('WebRTC: Audio autoplay blocked, unmuting listener added:', e.name);
           event.track.onunmute = () => {
             audioEl.play().catch(() => {});
           };
         });
-        // Also enable tracks
         ringtoneService.pipeRemoteAudioStream(stream);
       }
 
@@ -165,7 +230,7 @@ export class WebRTCService {
 
     // Add local tracks to peer connection
     if (this.localStream && this.localStream.getTracks().length > 0) {
-      console.log('WebRTC: Adding local tracks:', this.localStream.getTracks().map(t => t.kind));
+      console.log('WebRTC: Adding local tracks:', this.localStream.getTracks().map((t) => t.kind));
       this.localStream.getTracks().forEach((track) => {
         track.enabled = true;
         try {
@@ -175,8 +240,7 @@ export class WebRTCService {
         }
       });
     } else {
-      // Fallback: add transceivers so the SDP offer includes audio
-      console.warn('WebRTC: No localStream tracks yet, adding fallback transceivers');
+      console.warn('WebRTC: No localStream tracks yet, adding fallback transceiver');
       try {
         this.peerConnection.addTransceiver('audio', { direction: 'sendrecv' });
       } catch (e) {
@@ -193,7 +257,7 @@ export class WebRTCService {
       const offer = await this.peerConnection.createOffer({
         offerToReceiveAudio: true,
         offerToReceiveVideo: true,
-        voiceActivityDetection: false
+        voiceActivityDetection: false,
       });
       await this.peerConnection.setLocalDescription(offer);
       console.log('WebRTC: ✅ SDP offer created and set');
@@ -227,7 +291,7 @@ export class WebRTCService {
       const answer = await this.peerConnection.createAnswer({
         offerToReceiveAudio: true,
         offerToReceiveVideo: true,
-        voiceActivityDetection: false
+        voiceActivityDetection: false,
       });
       await this.peerConnection.setLocalDescription(answer);
       console.log('WebRTC: ✅ SDP answer created and set');
@@ -281,7 +345,6 @@ export class WebRTCService {
       this.peerConnection.close();
       this.peerConnection = null;
     }
-    // Detach module-level audio element
     if (_remoteAudioEl) {
       _remoteAudioEl.srcObject = null;
     }
@@ -291,7 +354,10 @@ export class WebRTCService {
 
   cleanup() {
     if (this.localStream) {
-      this.localStream.getTracks().forEach((track) => track.stop());
+      this.localStream.getTracks().forEach((track) => {
+        track.stop();
+        console.log(`WebRTC: Stopped track ${track.kind}`);
+      });
       this.localStream = null;
     }
     this.cleanupPeerConnection();
