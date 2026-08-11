@@ -21,9 +21,12 @@ async function handleResponse(res) {
 }
 
 async function apiFetch(endpoint, options = {}) {
-  const defaultApiUrl = import.meta.env.VITE_API_URL;
-  const baseUrl = defaultApiUrl || '/api';
-  const res = await fetch(`${baseUrl}${endpoint}`, options);
+  let baseUrl = import.meta.env.VITE_API_URL || '/api';
+  if (baseUrl.startsWith('http') && !baseUrl.endsWith('/api')) {
+    baseUrl = baseUrl.replace(/\/+$/, '') + '/api';
+  }
+  const url = `${baseUrl}${endpoint}`;
+  const res = await fetch(url, options);
   return handleResponse(res);
 }
 
