@@ -1,7 +1,17 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useCall } from '../context/useCall';
-import { fetchMessages, sendMessage as apiSendMessage, addReaction as apiAddReaction, markAsRead as apiMarkAsRead, uploadMedia, askMetaAi, createChat } from '../services/api';
+import { 
+  fetchMessages, 
+  sendMessage as apiSendMessage, 
+  editMessage as apiEditMessage,
+  deleteMessage as apiDeleteMessage,
+  addReaction as apiAddReaction, 
+  markAsRead as apiMarkAsRead, 
+  uploadMedia, 
+  askMetaAi, 
+  createChat 
+} from '../services/api';
 import { socketService } from '../services/socket';
 import EmojiPickerModal from './EmojiPickerModal';
 import ContactInfoSidebar from './ContactInfoSidebar';
@@ -17,6 +27,13 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
 
   // Quoted Reply State
   const [replyingTo, setReplyingTo] = useState(null);
+
+  // Edit Message State
+  const [editingMsgId, setEditingMsgId] = useState(null);
+  const [editText, setEditText] = useState('');
+
+  // Dropdown Context Menu State
+  const [activeMenuMsgId, setActiveMenuMsgId] = useState(null);
 
   // Reaction Picker State
   const [emojiPickerPos, setEmojiPickerPos] = useState(null);
@@ -35,17 +52,10 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
   useEffect(() => {
     if (activeChat) {
       loadMessages(activeChat.id);
+      setIsContactInfoOpen(false);
       setReplyingTo(null);
-
-      // Join chat room & mark messages as read
-      const socket = socketService.connect(user?.id);
-      if (socket) {
-        socket.emit('join_chat', activeChat.id);
-        apiMarkAsRead(activeChat.id).then(() => {
-          socket.emit('mark_read', { chatId: activeChat.id, userId: user?.id });
-          if (onMessagesRead) onMessagesRead(activeChat.id);
-        }).catch(console.error);
-      }
+      setEditingMsgId(null);
+      setActiveMenuMsgId(null);
     }
   }, [activeChat]);
 
@@ -68,6 +78,20 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
           socket.emit('mark_read', { chatId: activeChat.id, userId: user?.id });
         }
       }
+    };
+
+    // Listen to message edit events
+    const handleMessageEdited = (editedMsg) => {
+      setMessages((prev) =>
+        prev.map((m) => (String(m.id) === String(editedMsg.id) ? { ...m, content: editedMsg.content, isEdited: true, is_edited: true } : m))
+      );
+    };
+
+    // Listen to message deletion events
+    const handleMessageDeleted = ({ messageId, content }) => {
+      setMessages((prev) =>
+        prev.map((m) => (String(m.id) === String(messageId) ? { ...m, content: content || 'This message was deleted', isDeleted: true, is_deleted: true, mediaUrl: null, media_url: null } : m))
+      );
     };
 
     // Listen to typing events
@@ -99,7 +123,7 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
     const handleReactionUpdate = ({ messageId, userId, emoji }) => {
       setMessages((prev) =>
         prev.map((m) => {
-          if (m.id === messageId) {
+          if (String(m.id) === String(messageId)) {
             const existing = m.reactions || [];
             const filtered = existing.filter((r) => r.user_id !== userId);
             return { ...m, reactions: [...filtered, { user_id: userId, emoji }] };
@@ -110,6 +134,8 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
     };
 
     socket.on('receive_message', handleReceiveMessage);
+    socket.on('message_edited', handleMessageEdited);
+    socket.on('message_deleted', handleMessageDeleted);
     socket.on('typing_start', handleTypingStart);
     socket.on('typing_stop', handleTypingStop);
     socket.on('messages_read_update', handleReadUpdate);
@@ -117,6 +143,8 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
 
     return () => {
       socket.off('receive_message', handleReceiveMessage);
+      socket.off('message_edited', handleMessageEdited);
+      socket.off('message_deleted', handleMessageDeleted);
       socket.off('typing_start', handleTypingStart);
       socket.off('typing_stop', handleTypingStop);
       socket.off('messages_read_update', handleReadUpdate);
@@ -162,6 +190,7 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
     if ((!inputText.trim() && !mediaUrl) || !activeChat) return;
 
     const content = inputText.trim();
+    const replyTarget = replyingTo;
     setInputText('');
     setReplyingTo(null);
 
@@ -225,10 +254,18 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
       const newMsg = await apiSendMessage(
         targetChatId,
         content,
-        replyingTo?.id || null,
+        replyTarget?.id || null,
         mediaUrl,
         mediaType
       );
+
+      if (replyTarget && !newMsg.reply_to) {
+        newMsg.reply_to = {
+          id: replyTarget.id,
+          content: replyTarget.content,
+          sender_name: replyTarget.sender_name
+        };
+      }
 
       setMessages((prev) => {
         if (prev.some((m) => String(m.id) === String(newMsg.id))) return prev;
@@ -243,8 +280,58 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
     }
   };
 
+  const handleSetReply = (msg) => {
+    const senderName = msg.sender?.username || msg.sender_name || (String(msg.sender_id || msg.senderId) === String(user?.id) ? 'You' : getChatTitle());
+    setReplyingTo({
+      id: msg.id,
+      content: msg.content || (msg.media_url ? '📎 Attachment' : ''),
+      sender_name: senderName
+    });
+    setActiveMenuMsgId(null);
+  };
+
+  const handleStartEdit = (msg) => {
+    setEditingMsgId(msg.id);
+    setEditText(msg.content || '');
+    setActiveMenuMsgId(null);
+  };
+
+  const handleSaveEdit = async (msgId) => {
+    if (!editText.trim()) return;
+    try {
+      const updated = await apiEditMessage(msgId, editText.trim());
+      setMessages((prev) =>
+        prev.map((m) => (String(m.id) === String(msgId) ? { ...m, content: editText.trim(), isEdited: true, is_edited: true } : m))
+      );
+      const socket = socketService.getSocket();
+      if (socket && activeChat) {
+        socket.emit('edit_message', { messageId: msgId, chatId: activeChat.id, content: editText.trim() });
+      }
+      setEditingMsgId(null);
+      setEditText('');
+    } catch (err) {
+      console.error('Failed to edit message:', err);
+    }
+  };
+
+  const handleDeleteMsg = async (msgId) => {
+    try {
+      await apiDeleteMessage(msgId);
+      setMessages((prev) =>
+        prev.map((m) => (String(m.id) === String(msgId) ? { ...m, content: 'This message was deleted', isDeleted: true, is_deleted: true, mediaUrl: null, media_url: null } : m))
+      );
+      const socket = socketService.getSocket();
+      if (socket && activeChat) {
+        socket.emit('delete_message', { messageId: msgId, chatId: activeChat.id });
+      }
+      setActiveMenuMsgId(null);
+    } catch (err) {
+      console.error('Failed to delete message:', err);
+    }
+  };
+
   const handleFileUpload = (e) => {
-    const file = e.target.files?.[0];
+    const file = e.target.files[0];
     if (!file) return;
 
     setUploading(true);
@@ -308,7 +395,6 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
     }
 
     if (recipient && recipient.id) {
-      console.log('ChatArea: Resolved recipient user for call:', recipient);
       initiateCall(recipient, isVideo);
     } else {
       console.error('ChatArea: Failed to resolve recipient user in activeChat:', activeChat);
@@ -395,7 +481,7 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
           height: '100%', backgroundColor: 'var(--wa-bg-app)', position: 'relative'
         }}
       >
-        {/* Active Chat Header (Clickable for Contact Info) */}
+        {/* Active Chat Header */}
         <div 
           className="wa-chat-header"
           style={{
@@ -405,24 +491,18 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
             flexShrink: 0, zIndex: 10
           }}
         >
-          {/* Left Title & Avatar Clickable Area */}
+          {/* Left Title & Avatar */}
           <div 
             onClick={() => setIsContactInfoOpen((prev) => !prev)}
             style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer', flex: 1 }}
           >
-            {/* Mobile Back Arrow Button */}
             <button
               onClick={(e) => { e.stopPropagation(); onBack(); }}
               className="show-on-mobile"
               style={{
-                background: 'none',
-                border: 'none',
-                color: 'var(--wa-text-primary)',
-                fontSize: '22px',
-                cursor: 'pointer',
-                padding: '4px 6px 4px 0',
-                alignItems: 'center',
-                justifyContent: 'center'
+                background: 'none', border: 'none', color: 'var(--wa-text-primary)',
+                fontSize: '22px', cursor: 'pointer', padding: '4px 6px 4px 0',
+                alignItems: 'center', justifyContent: 'center'
               }}
               title="Back to Chats"
             >
@@ -447,7 +527,7 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
             </div>
           </div>
 
-          {/* Right Header Action Icons */}
+          {/* Right Header Icons */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             {!activeChat.is_group && (
               <>
@@ -474,7 +554,6 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
               </>
             )}
 
-            {/* Search in Chat */}
             <button
               onClick={() => setIsContactInfoOpen((prev) => !prev)}
               style={{
@@ -486,7 +565,6 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
               🔍
             </button>
 
-            {/* Contact Info Menu */}
             <button
               onClick={() => setIsContactInfoOpen((prev) => !prev)}
               style={{
@@ -501,12 +579,15 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
         </div>
 
       {/* Messages Scroll Area */}
-      <div style={{
-        flex: 1, overflowY: 'auto', padding: '16px 24px',
-        display: 'flex', flexDirection: 'column', gap: '10px',
-        backgroundImage: 'radial-gradient(var(--wa-border) 1px, transparent 0)',
-        backgroundSize: '24px 24px'
-      }}>
+      <div 
+        onClick={() => setActiveMenuMsgId(null)}
+        style={{
+          flex: 1, overflowY: 'auto', padding: '16px 24px',
+          display: 'flex', flexDirection: 'column', gap: '10px',
+          backgroundImage: 'radial-gradient(var(--wa-border) 1px, transparent 0)',
+          backgroundSize: '24px 24px'
+        }}
+      >
         {loading ? (
           <div style={{ textAlign: 'center', color: 'var(--wa-text-muted)', marginTop: '20px' }}>
             Loading messages...
@@ -529,13 +610,20 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
             const mediaUrl = msg.media_url || msg.mediaUrl;
             const mediaType = msg.media_type || msg.type || 'text';
 
+            const isDeleted = Boolean(msg.is_deleted || msg.isDeleted);
+            const isEdited = Boolean(msg.is_edited || msg.isEdited);
+            const isEditingThis = editingMsgId === msg.id;
+            const isMenuOpenThis = activeMenuMsgId === msg.id;
+
+            const replyObj = msg.reply_to || msg.replyTo;
+
             return (
               <div
                 key={msg.id || `msg-${idx}`}
                 className="wa-message-bubble"
                 style={{
                   alignSelf: isMe ? 'flex-end' : 'flex-start',
-                  maxWidth: '65%',
+                  maxWidth: '75%',
                   backgroundColor: isMe ? '#005c4b' : '#202c33',
                   color: 'var(--wa-text-primary)',
                   padding: '8px 12px 6px 12px',
@@ -552,20 +640,22 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
                 )}
 
                 {/* Quoted Message Preview inside bubble */}
-                {msg.reply_to && (
+                {replyObj && (
                   <div style={{
-                    backgroundColor: 'rgba(0,0,0,0.2)', borderLeft: '3px solid var(--wa-accent)',
-                    padding: '4px 8px', borderRadius: '4px', marginBottom: '6px', fontSize: '12px'
+                    backgroundColor: 'rgba(0,0,0,0.25)', borderLeft: '3px solid var(--wa-accent)',
+                    padding: '6px 10px', borderRadius: '4px', marginBottom: '6px', fontSize: '12px'
                   }}>
-                    <div style={{ fontWeight: 'bold', color: 'var(--wa-accent)' }}>{msg.reply_to.sender_name}</div>
+                    <div style={{ fontWeight: 'bold', color: 'var(--wa-accent)' }}>
+                      {replyObj.sender_name || replyObj.sender?.username || 'Replied Message'}
+                    </div>
                     <div style={{ color: 'var(--wa-text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      {msg.reply_to.content}
+                      {replyObj.content || '📎 Media Attachment'}
                     </div>
                   </div>
                 )}
 
                 {/* Media Content */}
-                {mediaUrl && (
+                {!isDeleted && mediaUrl && (
                   <div style={{ marginBottom: '6px' }}>
                     {mediaType === 'image' ? (
                       <img src={mediaUrl} alt="Attachment" style={{ maxWidth: '100%', borderRadius: '6px', maxHeight: '240px', objectFit: 'cover' }} />
@@ -581,48 +671,128 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
                   </div>
                 )}
 
-                {/* Text Content */}
-                {msg.content && renderStructuredMessage(msg.content)}
+                {/* Text Content / Edit Input Mode */}
+                {isEditingThis ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', margin: '4px 0' }}>
+                    <input
+                      type="text"
+                      value={editText}
+                      onChange={(e) => setEditText(e.target.value)}
+                      style={{
+                        backgroundColor: 'var(--wa-bg-input)', border: '1px solid var(--wa-accent)',
+                        borderRadius: '4px', padding: '6px 10px', color: '#e9edef', fontSize: '14px', outline: 'none'
+                      }}
+                      autoFocus
+                    />
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+                      <button
+                        onClick={() => setEditingMsgId(null)}
+                        style={{ background: 'none', border: 'none', color: '#8696a0', fontSize: '12px', cursor: 'pointer' }}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={() => handleSaveEdit(msg.id)}
+                        style={{ backgroundColor: '#00a884', border: 'none', borderRadius: '4px', color: '#111b21', fontWeight: 'bold', padding: '4px 10px', fontSize: '12px', cursor: 'pointer' }}
+                      >
+                        Save
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ fontStyle: isDeleted ? 'italic' : 'normal', color: isDeleted ? '#8696a0' : 'inherit' }}>
+                    {isDeleted ? '🚫 This message was deleted' : renderStructuredMessage(msg.content)}
+                  </div>
+                )}
 
-                {/* Message Actions (Reply & React) */}
+                {/* Bottom Bar: Action Trigger & Timestamp */}
                 <div style={{
                   display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                   marginTop: '4px', gap: '8px'
                 }}>
-                  <div style={{ display: 'flex', gap: '6px' }}>
-                    <button
-                      onClick={() => setReplyingTo(msg)}
-                      style={{ background: 'none', border: 'none', color: 'var(--wa-text-muted)', fontSize: '11px', cursor: 'pointer' }}
-                    >
-                      Reply
-                    </button>
+                  {/* Action Menu Button (Reply, Edit, Delete, React) */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', position: 'relative' }}>
                     <button
                       onClick={(e) => {
-                        const rect = e.currentTarget.getBoundingClientRect();
-                        setEmojiPickerPos({ top: rect.top - 45, left: rect.left });
-                        setTargetMsgId(msg.id);
+                        e.stopPropagation();
+                        setActiveMenuMsgId(isMenuOpenThis ? null : msg.id);
                       }}
-                      style={{ background: 'none', border: 'none', color: 'var(--wa-text-muted)', fontSize: '11px', cursor: 'pointer' }}
+                      style={{
+                        background: 'none', border: 'none', color: 'var(--wa-text-muted)',
+                        fontSize: '13px', cursor: 'pointer', padding: '2px 4px', borderRadius: '4px'
+                      }}
+                      title="Message Options"
                     >
-                      React
+                      ⋮
                     </button>
+
+                    {/* Context Action Menu Dropdown */}
+                    {isMenuOpenThis && (
+                      <div
+                        onClick={(e) => e.stopPropagation()}
+                        style={{
+                          position: 'absolute', bottom: '24px', left: isMe ? 'auto' : '0', right: isMe ? '0' : 'auto',
+                          backgroundColor: '#233138', border: '1px solid #2a3942', borderRadius: '8px',
+                          boxShadow: '0 4px 16px rgba(0,0,0,0.5)', zIndex: 100, minWidth: '150px', padding: '4px 0'
+                        }}
+                      >
+                        <div
+                          onClick={() => handleSetReply(msg)}
+                          style={{ padding: '8px 14px', fontSize: '13px', color: '#e9edef', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}
+                        >
+                          ↩️ Reply
+                        </div>
+
+                        {!isDeleted && (
+                          <div
+                            onClick={(e) => {
+                              const rect = e.currentTarget.getBoundingClientRect();
+                              setEmojiPickerPos({ top: rect.top - 45, left: rect.left });
+                              setTargetMsgId(msg.id);
+                              setActiveMenuMsgId(null);
+                            }}
+                            style={{ padding: '8px 14px', fontSize: '13px', color: '#e9edef', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}
+                          >
+                            😀 React
+                          </div>
+                        )}
+
+                        {isMe && !isDeleted && (
+                          <>
+                            <div
+                              onClick={() => handleStartEdit(msg)}
+                              style={{ padding: '8px 14px', fontSize: '13px', color: '#e9edef', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', borderTop: '1px solid #2a3942' }}
+                            >
+                              ✏️ Edit
+                            </div>
+                            <div
+                              onClick={() => handleDeleteMsg(msg.id)}
+                              style={{ padding: '8px 14px', fontSize: '13px', color: '#f87171', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}
+                            >
+                              🗑️ Delete
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    )}
                   </div>
 
-                  {/* Timestamp & Ticks */}
+                  {/* Timestamp, Edited Badge & Ticks */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '10px', color: '#8696a0' }}>
+                    {isEdited && !isDeleted && <span style={{ fontStyle: 'italic', marginRight: '2px' }}>(edited)</span>}
                     <span>{formattedTime}</span>
                     {isMe && renderTick(msg.status)}
                   </div>
                 </div>
 
-                {/* Emoji Reaction Pill Badges */}
+                {/* Emoji Reaction Badges */}
                 {msg.reactions && msg.reactions.length > 0 && (
                   <div style={{
                     position: 'absolute', bottom: '-10px', right: isMe ? 'auto' : '8px', left: isMe ? '8px' : 'auto',
                     backgroundColor: 'var(--wa-bg-panel)', border: '1px solid var(--wa-border)',
                     borderRadius: '12px', padding: '1px 6px', fontSize: '11px', boxShadow: '0 2px 4px rgba(0,0,0,0.3)'
                   }}>
-                    {msg.reactions.map((r, idx) => r.emoji).join(' ')}
+                    {msg.reactions.map((r) => r.emoji).join(' ')}
                   </div>
                 )}
               </div>
@@ -647,7 +817,11 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
               {replyingTo.content}
             </div>
           </div>
-          <button onClick={() => setReplyingTo(null)} style={{ background: 'none', border: 'none', color: 'var(--wa-text-muted)', cursor: 'pointer', fontSize: '16px' }}>
+          <button 
+            type="button"
+            onClick={() => setReplyingTo(null)} 
+            style={{ background: 'none', border: 'none', color: 'var(--wa-text-muted)', cursor: 'pointer', fontSize: '18px', fontWeight: 'bold' }}
+          >
             ✕
           </button>
         </div>
@@ -688,7 +862,7 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
 
         <input
           type="text"
-          placeholder={uploading ? 'Uploading media...' : 'Type a message'}
+          placeholder={replyingTo ? `Replying to ${replyingTo.sender_name}...` : uploading ? 'Uploading media...' : 'Type a message'}
           value={inputText}
           onChange={handleInputChange}
           style={{
@@ -723,7 +897,7 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
       />
     </div>
 
-    {/* Right Side Contact Info Panel (Matching Screenshots 2 & 3) */}
+    {/* Right Side Contact Info Panel */}
     <ContactInfoSidebar
       isOpen={isContactInfoOpen}
       onClose={() => setIsContactInfoOpen(false)}

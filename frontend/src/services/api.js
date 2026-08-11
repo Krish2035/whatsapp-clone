@@ -106,6 +106,23 @@ export async function sendMessage(chatId, content, replyToId = null, mediaUrl = 
   return data.message || data;
 }
 
+export async function editMessage(messageId, content) {
+  const data = await apiFetch(`/messages/${messageId}`, {
+    method: 'PUT',
+    headers: getAuthHeaders(),
+    body: JSON.stringify({ content }),
+  });
+  return data.message || data;
+}
+
+export async function deleteMessage(messageId) {
+  const data = await apiFetch(`/messages/${messageId}`, {
+    method: 'DELETE',
+    headers: getAuthHeaders(),
+  });
+  return data.message || data;
+}
+
 export async function addReaction(messageId, emoji) {
   return apiFetch('/messages/reaction', {
     method: 'POST',

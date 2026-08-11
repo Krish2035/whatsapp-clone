@@ -18,8 +18,9 @@ const messageController = {
   async sendMessage(req, res) {
     try {
       const senderId = req.user.id;
-      const { conversationId, chatId, receiverId, content, mediaUrl, type, mediaType, replyToId } = req.body;
+      const { conversationId, chatId, receiverId, content, mediaUrl, type, mediaType, replyToId, reply_to_id } = req.body;
       const targetConversationId = conversationId || chatId;
+      const targetReplyToId = replyToId || reply_to_id;
 
       const message = await messageService.createMessage({
         conversationId: targetConversationId,
@@ -28,10 +29,39 @@ const messageController = {
         content,
         mediaUrl,
         mediaType: type || mediaType || 'text',
-        replyToId
+        replyToId: targetReplyToId
       });
 
       res.status(201).json({ message });
+    } catch (err) {
+      res.status(400).json({ error: err.message });
+    }
+  },
+
+  async editMessage(req, res) {
+    try {
+      const userId = req.user.id;
+      const { messageId } = req.params;
+      const { content } = req.body;
+
+      if (!content || !content.trim()) {
+        return res.status(400).json({ error: 'Message content cannot be empty.' });
+      }
+
+      const message = await messageService.editMessage(messageId, userId, content.trim());
+      res.json({ message });
+    } catch (err) {
+      res.status(400).json({ error: err.message });
+    }
+  },
+
+  async deleteMessage(req, res) {
+    try {
+      const userId = req.user.id;
+      const { messageId } = req.params;
+
+      const message = await messageService.deleteMessage(messageId, userId);
+      res.json({ message });
     } catch (err) {
       res.status(400).json({ error: err.message });
     }

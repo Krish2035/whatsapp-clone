@@ -45,6 +45,20 @@ const messageService = {
     );
     message.sender = senderRes.rows[0];
 
+    // Fetch reply_to snippet if replyToId is present
+    if (replyToId) {
+      const replyRes = await pool.query(
+        `SELECT m.id, m.content, u.username as sender_name
+         FROM messages m
+         JOIN users u ON m.sender_id = u.id
+         WHERE m.id = $1`,
+        [replyToId]
+      );
+      if (replyRes.rows.length > 0) {
+        message.reply_to = replyRes.rows[0];
+      }
+    }
+
     return message;
   },
 
@@ -66,15 +80,27 @@ const messageService = {
         m.media_type as "type", 
         m.status, 
         m.reply_to_id as "replyToId", 
+        m.is_edited as "isEdited",
+        m.is_deleted as "isDeleted",
         m.created_at as "createdAt", 
         m.updated_at as "updatedAt",
         json_build_object(
           'id', u.id,
           'username', u.username,
           'avatar_url', u.avatar_url
-        ) as sender
+        ) as sender,
+        CASE 
+          WHEN rm.id IS NOT NULL THEN json_build_object(
+            'id', rm.id,
+            'content', rm.content,
+            'sender_name', ru.username
+          )
+          ELSE NULL 
+        END as reply_to
        FROM messages m
        JOIN users u ON m.sender_id = u.id
+       LEFT JOIN messages rm ON m.reply_to_id = rm.id
+       LEFT JOIN users ru ON rm.sender_id = ru.id
        WHERE m.chat_id = $1
        ORDER BY m.created_at ASC
        LIMIT $2 OFFSET $3`,
@@ -82,6 +108,42 @@ const messageService = {
     );
 
     return result.rows;
+  },
+
+  /**
+   * Edit message content (only allowed by original sender)
+   */
+  async editMessage(messageId, userId, newContent) {
+    const result = await pool.query(
+      `UPDATE messages
+       SET content = $1, is_edited = TRUE, updated_at = CURRENT_TIMESTAMP
+       WHERE id = $2 AND sender_id = $3
+       RETURNING id, chat_id as "conversationId", sender_id as "senderId", receiver_id as "receiverId", content, is_edited as "isEdited", updated_at as "updatedAt"`,
+      [newContent, messageId, userId]
+    );
+
+    if (result.rows.length === 0) {
+      throw new Error('Message not found or you are not authorized to edit this message.');
+    }
+    return result.rows[0];
+  },
+
+  /**
+   * Delete message (soft delete for everyone, only allowed by original sender)
+   */
+  async deleteMessage(messageId, userId) {
+    const result = await pool.query(
+      `UPDATE messages
+       SET content = 'This message was deleted', is_deleted = TRUE, media_url = NULL, updated_at = CURRENT_TIMESTAMP
+       WHERE id = $1 AND sender_id = $2
+       RETURNING id, chat_id as "conversationId", sender_id as "senderId", receiver_id as "receiverId", content, is_deleted as "isDeleted", updated_at as "updatedAt"`,
+      [messageId, userId]
+    );
+
+    if (result.rows.length === 0) {
+      throw new Error('Message not found or you are not authorized to delete this message.');
+    }
+    return result.rows[0];
   },
 
   /**

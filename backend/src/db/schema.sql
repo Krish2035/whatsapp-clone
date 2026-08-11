@@ -38,6 +38,8 @@ CREATE TABLE IF NOT EXISTS messages (
   reply_to_id INTEGER REFERENCES messages(id) ON DELETE SET NULL,
   media_url TEXT DEFAULT NULL,
   media_type VARCHAR(50) DEFAULT 'text', -- 'text', 'image', 'video', 'audio', 'document'
+  is_edited BOOLEAN DEFAULT FALSE,
+  is_deleted BOOLEAN DEFAULT FALSE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );

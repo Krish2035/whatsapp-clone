@@ -7,6 +7,8 @@ router.use(authenticateToken);
 
 router.get('/:conversationId', messageController.getMessages);
 router.post('/', messageController.sendMessage);
+router.put('/:messageId', messageController.editMessage);
+router.delete('/:messageId', messageController.deleteMessage);
 router.patch('/:messageId/delivered', messageController.markDelivered);
 router.patch('/:conversationId/read', messageController.markRead);
 router.post('/:conversationId/read', messageController.markRead);

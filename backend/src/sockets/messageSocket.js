@@ -9,10 +9,8 @@ module.exports = function registerMessageHandlers(io, socket, onlineUsers) {
 
       let message;
       if (data.id) {
-        // Message was already persisted in PostgreSQL via REST API
         message = data;
       } else {
-        // Persist message in PostgreSQL database
         message = await messageService.createMessage({
           conversationId: targetChatId,
           senderId,
@@ -26,11 +24,9 @@ module.exports = function registerMessageHandlers(io, socket, onlineUsers) {
 
       const receiverId = message.receiverId || message.receiver_id;
 
-      // 1. Emit to the conversation room (excluding sender socket to prevent duplicate render)
       socket.to(`chat_${targetChatId}`).emit('new_message', message);
       socket.to(`chat_${targetChatId}`).emit('receive_message', message);
 
-      // 2. Direct emit to receiver's active sockets if online
       if (receiverId) {
         const receiverSockets = onlineUsers.get(parseInt(receiverId, 10));
         if (receiverSockets && receiverSockets.size > 0) {
@@ -39,7 +35,6 @@ module.exports = function registerMessageHandlers(io, socket, onlineUsers) {
             io.to(sockId).emit('receive_message', message);
           });
 
-          // Mark message as delivered automatically since receiver is online
           const deliveredMessage = await messageService.markMessageDelivered(message.id, receiverId);
           if (deliveredMessage) {
             io.to(`chat_${targetChatId}`).emit('message_delivered', deliveredMessage);
@@ -55,6 +50,32 @@ module.exports = function registerMessageHandlers(io, socket, onlineUsers) {
       if (typeof callback === 'function') {
         callback({ status: 'error', error: err.message });
       }
+    }
+  });
+
+  // Edit Message Real-Time Dispatch
+  socket.on('edit_message', async ({ messageId, chatId, content }, callback) => {
+    try {
+      const userId = socket.userId;
+      const updated = await messageService.editMessage(messageId, userId, content);
+      io.to(`chat_${chatId}`).emit('message_edited', updated);
+      if (typeof callback === 'function') callback({ status: 'ok', message: updated });
+    } catch (err) {
+      console.error('Socket edit_message error:', err.message);
+      if (typeof callback === 'function') callback({ status: 'error', error: err.message });
+    }
+  });
+
+  // Delete Message Real-Time Dispatch
+  socket.on('delete_message', async ({ messageId, chatId }, callback) => {
+    try {
+      const userId = socket.userId;
+      const deleted = await messageService.deleteMessage(messageId, userId);
+      io.to(`chat_${chatId}`).emit('message_deleted', { messageId, chatId, content: deleted.content });
+      if (typeof callback === 'function') callback({ status: 'ok', message: deleted });
+    } catch (err) {
+      console.error('Socket delete_message error:', err.message);
+      if (typeof callback === 'function') callback({ status: 'error', error: err.message });
     }
   });
 
