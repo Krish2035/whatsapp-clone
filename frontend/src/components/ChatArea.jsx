@@ -939,17 +939,29 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
                   {isMe && renderTick(msg.status)}
                 </div>
 
-                {/* Emoji Reaction Badges (Positioned cleanly at bottom-right corner) */}
+                {/* Emoji Reaction Badges (Positioned at bottom-left corner of message bubble) */}
                 {msg.reactions && msg.reactions.length > 0 && (
-                  <div style={{
-                    position: 'absolute', bottom: '-10px', right: isMe ? 'auto' : '8px', left: isMe ? '8px' : 'auto',
-                    backgroundColor: '#233138', border: '1px solid #2a3942',
-                    borderRadius: '12px', padding: '1px 6px', fontSize: '12px', boxShadow: '0 2px 4px rgba(0,0,0,0.3)',
-                    display: 'flex', gap: '2px', alignItems: 'center'
-                  }}>
+                  <div 
+                    onClick={(e) => e.stopPropagation()}
+                    style={{
+                      position: 'absolute',
+                      bottom: '-14px',
+                      left: '10px',
+                      backgroundColor: '#233138',
+                      border: '1px solid #2a3942',
+                      borderRadius: '12px',
+                      padding: '2px 8px',
+                      fontSize: '14px',
+                      boxShadow: '0 2px 6px rgba(0,0,0,0.5)',
+                      display: 'flex',
+                      gap: '4px',
+                      alignItems: 'center',
+                      zIndex: 20
+                    }}
+                  >
                     {Array.from(new Set(msg.reactions.map((r) => r.emoji))).join(' ')}
                     {msg.reactions.length > 1 && (
-                      <span style={{ fontSize: '10px', color: '#8696a0', marginLeft: '2px' }}>
+                      <span style={{ fontSize: '10px', color: '#8696a0', marginLeft: '2px', fontWeight: 'bold' }}>
                         {msg.reactions.length}
                       </span>
                     )}
