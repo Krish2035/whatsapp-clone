@@ -57,3 +57,33 @@ CREATE INDEX IF NOT EXISTS idx_messages_sender_id ON messages(sender_id);
 CREATE INDEX IF NOT EXISTS idx_messages_receiver_id ON messages(receiver_id);
 CREATE INDEX IF NOT EXISTS idx_messages_receiver_status ON messages(receiver_id, status);
 CREATE INDEX IF NOT EXISTS idx_chat_participants_user_id ON chat_participants(user_id);
+
+-- WhatsApp Status Feature Tables
+CREATE TABLE IF NOT EXISTS statuses (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  media_url TEXT DEFAULT NULL,
+  media_type VARCHAR(20) DEFAULT 'text',
+  caption TEXT DEFAULT '',
+  bg_color VARCHAR(30) DEFAULT '#075e54',
+  duration_ms INTEGER DEFAULT 5000,
+  expires_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS status_views (
+  id SERIAL PRIMARY KEY,
+  status_id INTEGER REFERENCES statuses(id) ON DELETE CASCADE,
+  viewer_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  viewed_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(status_id, viewer_id)
+);
+
+CREATE TABLE IF NOT EXISTS status_reactions (
+  id SERIAL PRIMARY KEY,
+  status_id INTEGER REFERENCES statuses(id) ON DELETE CASCADE,
+  user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  emoji VARCHAR(20) NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(status_id, user_id)
+);

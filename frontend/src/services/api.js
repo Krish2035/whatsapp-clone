@@ -134,3 +134,48 @@ export async function askMetaAi(prompt) {
     body: JSON.stringify({ prompt }),
   });
 }
+
+// ── Status API ──────────────────────────────────────────────────────────────
+
+export async function fetchStatuses() {
+  const data = await apiFetch('/statuses', { headers: getAuthHeaders() });
+  return data.statusGroups || [];
+}
+
+export async function createStatus({ media_url, media_type, caption, bg_color, duration_ms }) {
+  const data = await apiFetch('/statuses', {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify({ media_url, media_type, caption, bg_color, duration_ms }),
+  });
+  return data.status;
+}
+
+export async function deleteStatus(statusId) {
+  return apiFetch(`/statuses/${statusId}`, {
+    method: 'DELETE',
+    headers: getAuthHeaders(),
+  });
+}
+
+export async function viewStatus(statusId) {
+  return apiFetch(`/statuses/${statusId}/view`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+  });
+}
+
+export async function fetchStatusViewers(statusId) {
+  const data = await apiFetch(`/statuses/${statusId}/viewers`, {
+    headers: getAuthHeaders(),
+  });
+  return data.viewers || [];
+}
+
+export async function reactToStatus(statusId, emoji) {
+  return apiFetch(`/statuses/${statusId}/react`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify({ emoji }),
+  });
+}

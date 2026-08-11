@@ -4,12 +4,8 @@ const getSocketUrl = () => {
   if (import.meta.env.VITE_SOCKET_URL) {
     return import.meta.env.VITE_SOCKET_URL;
   }
-  if (typeof window !== 'undefined') {
-    const hostname = window.location.hostname || 'localhost';
-    // Direct connection to Express backend on port 5000 bypassing Vite WS proxy
-    return `http://${hostname}:5000`;
-  }
-  return 'http://localhost:5000';
+  // Use relative origin so Vite proxy handles /socket.io correctly for localhost, IP, and ngrok HTTPS
+  return undefined;
 };
 
 const SOCKET_URL = getSocketUrl();
@@ -27,13 +23,12 @@ class SocketService {
     }
 
     if (!this.socket) {
-      console.log('SocketService: Direct connection to socket origin:', SOCKET_URL);
+      console.log('SocketService: Connecting to socket origin:', SOCKET_URL || window.location.origin);
       this.socket = io(SOCKET_URL, {
         transports: ['websocket', 'polling'],
         reconnection: true,
         reconnectionAttempts: 50,
         reconnectionDelay: 500,
-        secure: false,
       });
 
       this.socket.on('connect', () => {

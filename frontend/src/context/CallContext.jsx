@@ -377,21 +377,9 @@ export function CallProvider({ children }) {
 
     try {
       // 1. Await Local MediaStream
+      // 1. Await Local MediaStream
       const stream = await streamPromise;
       setLocalStream(stream);
-
-      // 🎙️ Publish Stream to Agora RTC Cloud Engine cleanly without hardware locks
-      try {
-        await agoraService.joinChannel(roomId, activeUser.id);
-        await agoraService.createLocalTracksFromStream(stream, isVideo);
-        await agoraService.publishLocalTracks();
-        agoraService.onRemoteUserPublished((remoteUser, mediaType) => {
-          console.log('CallContext: Agora remote user audio/video active:', remoteUser.uid, mediaType);
-          setCallStatus('connected');
-        });
-      } catch (agoraErr) {
-        console.warn('Agora RTC initiate call warning:', agoraErr);
-      }
 
       // 2. Create RTCPeerConnection FIRST (bind local tracks & candidate callbacks)
       webrtcService.createPeerConnection(
@@ -461,6 +449,7 @@ export function CallProvider({ children }) {
 
     const socket = socketService.connect(activeUser.id);
 
+    // CRITICAL: Stop ringtone and unlock AudioContext synchronously inside user-gesture
     ringtoneService.stopRingtone();
     unlockAudioContext();
 
@@ -481,20 +470,6 @@ export function CallProvider({ children }) {
       // 1. Await Local MediaStream
       const stream = await streamPromise;
       setLocalStream(stream);
-
-      // 🎙️ Publish Stream to Agora RTC Cloud Engine on Accept Side
-      try {
-        const roomToJoin = channelName || `room_${activePeerIdRef.current}_${activeUser.id}`;
-        await agoraService.joinChannel(roomToJoin, activeUser.id);
-        await agoraService.createLocalTracksFromStream(stream, isVideoCall);
-        await agoraService.publishLocalTracks();
-        agoraService.onRemoteUserPublished((remoteUser, mediaType) => {
-          console.log('CallContext: Agora remote user audio/video active on accept side:', remoteUser.uid, mediaType);
-          setCallStatus('connected');
-        });
-      } catch (agoraErr) {
-        console.warn('Agora RTC accept call warning:', agoraErr);
-      }
 
       // 2. Create RTCPeerConnection and bind candidates
       webrtcService.createPeerConnection(
@@ -592,7 +567,6 @@ export function CallProvider({ children }) {
   const toggleMute = () => {
     const nextMuted = !isMuted;
     setIsMuted(nextMuted);
-    agoraService.setMuted(nextMuted);
     if (localStream) {
       localStream.getAudioTracks().forEach((t) => (t.enabled = !nextMuted));
     }
@@ -602,7 +576,6 @@ export function CallProvider({ children }) {
   const toggleCamera = () => {
     const nextCam = !isCamOff;
     setIsCamOff(nextCam);
-    agoraService.setCameraOff(nextCam);
     if (localStream) {
       localStream.getVideoTracks().forEach((t) => (t.enabled = !nextCam));
     }
@@ -611,6 +584,7 @@ export function CallProvider({ children }) {
   // Cleanup helper
   const cleanupCall = () => {
     ringtoneService.stopRingtone();
+    ringtoneService.cleanupRemoteAudio();
     if (channelName && channelName.startsWith('room_')) {
       firebaseService.endCallRoom(channelName, 'ended');
     }

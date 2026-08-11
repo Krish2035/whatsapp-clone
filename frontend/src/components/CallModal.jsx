@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useCall } from '../context/useCall';
+import { ringtoneService } from '../services/ringtoneService';
 
 export default function CallModal() {
   const {
@@ -27,7 +28,7 @@ export default function CallModal() {
   const remoteAudioRef = useRef(null);
   const timerRef = useRef(null);
 
-  // Bind local video/audio stream to DOM
+  // Bind local video stream to DOM
   useEffect(() => {
     if (localStream && localVideoRef.current) {
       localVideoRef.current.srcObject = localStream;
@@ -35,23 +36,35 @@ export default function CallModal() {
     }
   }, [localStream, callStatus]);
 
-  // Bind remote video/audio stream to DOM
+  // Remote stream - bind video to DOM; audio is handled by webrtcService module-level element
   useEffect(() => {
     if (remoteStream) {
+      const audioTracks = remoteStream.getAudioTracks();
+      console.log('CallModal: Remote stream received. Audio tracks:', audioTracks.length);
+
+      // Enable all audio tracks
+      audioTracks.forEach(t => {
+        t.enabled = true;
+      });
+
+      // Bind video to video element
       if (remoteVideoRef.current) {
         remoteVideoRef.current.srcObject = remoteStream;
         remoteVideoRef.current.play().catch(e => console.warn('Remote video play warning:', e));
       }
+      // Also bind audio to in-DOM audio element as double fallback
       if (remoteAudioRef.current) {
         remoteAudioRef.current.srcObject = remoteStream;
         remoteAudioRef.current.volume = 1.0;
         remoteAudioRef.current.muted = false;
-        remoteAudioRef.current.play().catch(e => console.warn('Remote audio play warning:', e));
+        remoteAudioRef.current.play().then(() => {
+          console.log('CallModal: ✅ Fallback audio element playing!');
+        }).catch(e => console.warn('Fallback audio play:', e.name));
       }
     }
   }, [remoteStream, callStatus]);
 
-  // Handle call duration timer
+  // When call becomes connected - retry audio play (catches autoplay deferred cases)
   useEffect(() => {
     if (callStatus === 'connected') {
       setCallDuration(0);
@@ -59,8 +72,9 @@ export default function CallModal() {
         setCallDuration((prev) => prev + 1);
       }, 1000);
 
-      if (remoteAudioRef.current) {
-        remoteAudioRef.current.play().catch((e) => console.warn('Audio play policy warning:', e));
+      // Retry audio play - user gesture already happened on accept click
+      if (remoteAudioRef.current && remoteAudioRef.current.srcObject) {
+        remoteAudioRef.current.play().catch(() => {});
       }
     } else {
       if (timerRef.current) clearInterval(timerRef.current);
@@ -179,12 +193,13 @@ export default function CallModal() {
         overflow: 'hidden',
       }}
     >
-      {/* Persistent Audio Player for Remote Voice Output */}
+      {/* Persistent Audio Player for Remote Voice Output - in-layout (visibility hidden avoids mobile power manager muting) */}
       <audio
         ref={remoteAudioRef}
         autoPlay
         playsInline
-        style={{ position: 'fixed', left: '-9999px', top: '-9999px' }}
+        controls={false}
+        style={{ visibility: 'hidden', width: '1px', height: '1px', position: 'absolute', bottom: '0', left: '0', pointerEvents: 'none' }}
       />
 
       {/* 1. Top Header Bar */}
@@ -388,6 +403,7 @@ export default function CallModal() {
             <div style={{ textAlign: 'center' }}>
               <button
                 onClick={() => {
+                  ringtoneService.initContext();
                   if (remoteAudioRef.current) {
                     remoteAudioRef.current.play().catch(() => {});
                   }

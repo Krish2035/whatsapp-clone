@@ -103,11 +103,6 @@ class RingtoneService {
       });
       this.activeOscillators = [];
     }
-    if (this.audioCtx && this.audioCtx.state === 'running') {
-      try {
-        this.audioCtx.suspend().catch(() => {});
-      } catch (e) {}
-    }
   }
 
   async pipeRemoteAudioStream(remoteStream) {
@@ -118,6 +113,15 @@ class RingtoneService {
         t.enabled = true;
       });
       console.log('RingtoneService: Activated remote audio tracks:', audioTracks.length);
+    }
+  }
+
+  cleanupRemoteAudio() {
+    if (this.remoteSourceNode) {
+      try {
+        this.remoteSourceNode.disconnect();
+      } catch (e) {}
+      this.remoteSourceNode = null;
     }
   }
 }
