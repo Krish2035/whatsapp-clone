@@ -10,9 +10,9 @@ let pgPool = null;
 let sqliteDb = null;
 
 const dbHost = process.env.DB_HOST || 'localhost';
-const dbPort = parseInt(process.env.DB_PORT || '5432');
+const dbPort = parseInt(process.env.DB_PORT || '5432', 10);
 
-function checkPgPort(host, port, timeoutMs = 300) {
+function checkPgPort(host, port, timeoutMs = 500) {
   return new Promise((resolve) => {
     const socket = net.createConnection({ host, port, timeout: timeoutMs });
     socket.on('connect', () => {
@@ -32,6 +32,24 @@ function checkPgPort(host, port, timeoutMs = 300) {
 
 // Instant detection of PostgreSQL availability on startup
 (async () => {
+  if (process.env.DATABASE_URL) {
+    try {
+      console.log('Connecting to PostgreSQL via DATABASE_URL...');
+      pgPool = new Pool({
+        connectionString: process.env.DATABASE_URL,
+        ssl: process.env.DATABASE_URL.includes('sslmode=disable') ? false : { rejectUnauthorized: false },
+        connectionTimeoutMillis: 5000,
+      });
+      const client = await pgPool.connect();
+      client.release();
+      usePg = true;
+      console.log('✅ Connected to Cloud PostgreSQL Database successfully.');
+      return;
+    } catch (err) {
+      console.error('❌ Cloud PostgreSQL connection failed:', err.message);
+    }
+  }
+
   const isPgAvailable = await checkPgPort(dbHost, dbPort, 300);
   if (isPgAvailable) {
     try {
@@ -46,10 +64,10 @@ function checkPgPort(host, port, timeoutMs = 300) {
       const client = await pgPool.connect();
       client.release();
       usePg = true;
-      console.log('✅ Connected to PostgreSQL Database successfully.');
+      console.log('✅ Connected to Local PostgreSQL Database successfully.');
       return;
     } catch (err) {
-      console.log('ℹ️ PostgreSQL connection attempt failed. Using embedded SQLite database.');
+      console.log('ℹ️ Local PostgreSQL connection attempt failed. Using embedded SQLite database.');
     }
   } else {
     console.log('ℹ️ Local SQLite database active (whatsapp_clone.db).');
@@ -68,35 +86,26 @@ function initSqlite() {
 
   try {
     sqliteDb.exec('ALTER TABLE messages ADD COLUMN receiver_id INTEGER REFERENCES users(id)');
-  } catch (e) {
-    // Column may already exist or table not created yet
-  }
+  } catch (e) {}
 
   try {
     sqliteDb.exec('ALTER TABLE chats ADD COLUMN updated_at DATETIME');
-  } catch (e) {
-    // Column may already exist or table not created yet
-  }
+  } catch (e) {}
 
   try {
     sqliteDb.exec('ALTER TABLE messages ADD COLUMN updated_at DATETIME');
-  } catch (e) {
-    // Column may already exist or table not created yet
-  }
+  } catch (e) {}
 
   if (fs.existsSync(schemaPath)) {
     const schemaSql = fs.readFileSync(schemaPath, 'utf8')
       .replace(/SERIAL PRIMARY KEY/gi, 'INTEGER PRIMARY KEY AUTOINCREMENT')
       .replace(/TIMESTAMP WITH TIME ZONE/gi, 'DATETIME');
-    
-    // Execute statements individually to ignore index creation failures if columns are being added
+
     const statements = schemaSql.split(';').map(s => s.trim()).filter(Boolean);
     for (const stmt of statements) {
       try {
         sqliteDb.exec(stmt);
-      } catch (err) {
-        // Ignore duplicate index errors
-      }
+      } catch (err) {}
     }
   }
 
@@ -104,9 +113,7 @@ function initSqlite() {
     try {
       const seedSql = fs.readFileSync(seedPath, 'utf8');
       sqliteDb.exec(seedSql);
-    } catch (e) {
-      // Seed data may already be loaded
-    }
+    } catch (e) {}
   }
 }
 
@@ -134,9 +141,7 @@ function parseJsonFields(row) {
     if (newRow[key] && typeof newRow[key] === 'string') {
       try {
         newRow[key] = JSON.parse(newRow[key]);
-      } catch (e) {
-        // Keep as string if parsing fails
-      }
+      } catch (e) {}
     }
   }
   if (typeof newRow.is_group === 'number') newRow.is_group = Boolean(newRow.is_group);
@@ -172,9 +177,7 @@ const pool = {
           if (Array.isArray(result) && result.length > 0) {
             return { rows: result.map(parseJsonFields) };
           }
-        } catch (e) {
-          // Fallback if RETURNING statement fails in SQLite version
-        }
+        } catch (e) {}
 
         const cleanSql = sql.replace(/\s*RETURNING\s+.*$/i, '');
         const stmt = sqliteDb.prepare(cleanSql);
