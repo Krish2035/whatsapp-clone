@@ -66,8 +66,19 @@ const messageService = {
    * Fetch messages for a conversation with authorization check.
    */
   async getMessagesByConversation(conversationId, userId, limit = 100, offset = 0) {
+    if (!conversationId || String(conversationId).startsWith('temp-')) {
+      return [];
+    }
+
+    const numChatId = parseInt(conversationId, 10);
+    const numUserId = parseInt(userId, 10);
+
+    if (isNaN(numChatId) || isNaN(numUserId)) {
+      return [];
+    }
+
     // Validate membership
-    await conversationService.getConversationById(conversationId, userId);
+    await conversationService.getConversationById(numChatId, numUserId);
 
     const result = await pool.query(
       `SELECT 
@@ -104,7 +115,7 @@ const messageService = {
        WHERE m.chat_id = $1
        ORDER BY m.created_at ASC
        LIMIT $2 OFFSET $3`,
-      [conversationId, limit, offset]
+      [numChatId, limit, offset]
     );
 
     return result.rows;

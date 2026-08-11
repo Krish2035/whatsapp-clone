@@ -39,6 +39,9 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
   // Reaction Bar Floating State (per message ID)
   const [activeReactionMsgId, setActiveReactionMsgId] = useState(null);
 
+  // Touch Long-Press Timer Ref
+  const touchTimerRef = useRef(null);
+
   // File Upload State
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef(null);
@@ -171,12 +174,17 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
   }, [messages, isTyping]);
 
   const loadMessages = async (chatId) => {
+    if (!chatId || String(chatId).startsWith('temp-')) {
+      setMessages([]);
+      return;
+    }
     setLoading(true);
     try {
       const msgs = await fetchMessages(chatId);
-      setMessages(msgs);
+      setMessages(Array.isArray(msgs) ? msgs : []);
     } catch (err) {
       console.error('Failed to load messages:', err);
+      setMessages([]);
     } finally {
       setLoading(false);
     }
@@ -318,7 +326,6 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
     setEditingMsgId(null);
     setEditText('');
 
-    // Optimistic UI update
     setMessages((prev) =>
       prev.map((m) => (String(m.id) === String(msgId) ? { ...m, content: newContent, isEdited: true, is_edited: true } : m))
     );
@@ -337,9 +344,8 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
   const handleDeleteMsg = async (msgId) => {
     setActiveMenuMsgId(null);
 
-    // Optimistic UI update
     setMessages((prev) =>
-      prev.map((m) => (String(m.id) === String(msgId) ? { ...m, content: 'This message was deleted', isDeleted: true, is_deleted: true, mediaUrl: null, media_url: null } : m))
+      prev.map((m) => (String(m.id) === String(msgId) ? { ...m, content: 'This message was deleted', isDeleted: true, is_edited: false, is_deleted: true, mediaUrl: null, media_url: null } : m))
     );
 
     try {
@@ -381,6 +387,19 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
       console.error('Failed to add reaction:', err);
     } finally {
       setActiveReactionMsgId(null);
+    }
+  };
+
+  // Touch Long Press Handlers for Mobile
+  const handleTouchStart = (msgId) => {
+    touchTimerRef.current = setTimeout(() => {
+      setActiveMenuMsgId(msgId);
+    }, 450);
+  };
+
+  const handleTouchEnd = () => {
+    if (touchTimerRef.current) {
+      clearTimeout(touchTimerRef.current);
     }
   };
 
@@ -660,19 +679,21 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
               <div
                 key={msg.id || `msg-${idx}`}
                 className="wa-message-bubble"
+                onTouchStart={() => handleTouchStart(msg.id)}
+                onTouchEnd={handleTouchEnd}
                 style={{
                   alignSelf: isMe ? 'flex-end' : 'flex-start',
                   maxWidth: '75%',
-                  minWidth: '140px',
+                  minWidth: '150px',
                   backgroundColor: isMe ? '#005c4b' : '#202c33',
                   color: 'var(--wa-text-primary)',
-                  padding: '8px 26px 6px 12px',
+                  padding: '8px 28px 6px 12px',
                   borderRadius: isMe ? '8px 0px 8px 8px' : '0px 8px 8px 8px',
                   boxShadow: '0 1px 2px rgba(0,0,0,0.2)',
                   position: 'relative'
                 }}
               >
-                {/* Floating Quick Reaction Bar (Attached directly above the bubble) */}
+                {/* Floating Quick Reaction Bar */}
                 {isReactionOpenThis && (
                   <div
                     onClick={(e) => e.stopPropagation()}
@@ -717,7 +738,7 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
                   </div>
                 )}
 
-                {/* Top-Right Small Chevron Down Triangle/Arrow (v) Button */}
+                {/* Top-Right Always Visible Chevron Down Arrow (v) Button */}
                 <button
                   type="button"
                   onClick={(e) => {
@@ -729,17 +750,19 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
                     position: 'absolute',
                     top: '4px',
                     right: '4px',
-                    background: 'none',
-                    border: 'none',
-                    color: '#aebac1',
-                    fontSize: '11px',
+                    backgroundColor: '#233138',
+                    border: '1px solid #2a3942',
+                    color: '#e9edef',
                     cursor: 'pointer',
-                    padding: '2px 4px',
                     borderRadius: '50%',
+                    width: '20px',
+                    height: '20px',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    zIndex: 5
+                    zIndex: 10,
+                    boxShadow: '0 2px 4px rgba(0,0,0,0.4)',
+                    opacity: 1
                   }}
                   title="Message Options"
                 >
@@ -754,7 +777,7 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
                     onClick={(e) => e.stopPropagation()}
                     style={{
                       position: 'absolute',
-                      top: '24px',
+                      top: '26px',
                       right: '4px',
                       backgroundColor: '#233138',
                       border: '1px solid #2a3942',

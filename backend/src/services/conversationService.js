@@ -84,9 +84,16 @@ const conversationService = {
    * Get detailed conversation metadata and ensure user is a valid participant.
    */
   async getConversationById(chatId, userId) {
+    const numChatId = parseInt(chatId, 10);
+    const numUserId = parseInt(userId, 10);
+
+    if (isNaN(numChatId) || isNaN(numUserId)) {
+      throw new Error('Invalid conversation or user ID');
+    }
+
     const participantCheck = await pool.query(
       'SELECT 1 FROM chat_participants WHERE chat_id = $1 AND user_id = $2',
-      [chatId, userId]
+      [numChatId, numUserId]
     );
 
     if (participantCheck.rows.length === 0) {
@@ -95,7 +102,7 @@ const conversationService = {
 
     const chatRes = await pool.query(
       'SELECT id, is_group, group_name, created_at, updated_at FROM chats WHERE id = $1',
-      [chatId]
+      [numChatId]
     );
 
     if (chatRes.rows.length === 0) {
@@ -110,7 +117,7 @@ const conversationService = {
        FROM chat_participants cp
        JOIN users u ON cp.user_id = u.id
        WHERE cp.chat_id = $1`,
-      [chatId]
+      [numChatId]
     );
     conversation.participants = partRes.rows;
 
@@ -121,7 +128,7 @@ const conversationService = {
        WHERE chat_id = $1
        ORDER BY created_at DESC
        LIMIT 1`,
-      [chatId]
+      [numChatId]
     );
     conversation.last_message = msgRes.rows[0] || null;
 
@@ -130,7 +137,7 @@ const conversationService = {
       `SELECT COUNT(*) as count 
        FROM messages 
        WHERE chat_id = $1 AND sender_id != $2 AND status != 'read'`,
-      [chatId, userId]
+      [numChatId, numUserId]
     );
     conversation.unread_count = parseInt(unreadRes.rows[0]?.count || '0', 10);
 
