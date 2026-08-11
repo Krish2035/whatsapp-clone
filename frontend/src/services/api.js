@@ -139,12 +139,26 @@ export async function markAsRead(chatId) {
   });
 }
 
-export async function uploadMedia(fileData, fileName, fileType) {
-  return apiFetch('/upload', {
+export async function uploadMedia(file) {
+  const formData = new FormData();
+  formData.append('file', file);
+
+  // For multipart upload, don't add Content-Type header — browser sets it automatically
+  const token = localStorage.getItem('token') || sessionStorage.getItem('token');
+  const headers = {};
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+
+  const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:5001/api';
+  const res = await fetch(`${baseUrl}/upload`, {
     method: 'POST',
-    headers: getAuthHeaders(),
-    body: JSON.stringify({ fileData, fileName, fileType }),
+    headers,
+    body: formData,
   });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: 'Upload failed' }));
+    throw new Error(err.error || 'Upload failed');
+  }
+  return res.json();
 }
 
 export async function askMetaAi(prompt) {

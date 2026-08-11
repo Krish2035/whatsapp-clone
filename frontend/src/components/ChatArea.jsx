@@ -207,14 +207,15 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
     }, 2000);
   };
 
-  const handleSend = async (e, mediaUrl = null, mediaType = null) => {
+  const handleSend = async (e, mediaUrl = null, mediaType = null, originalName = null) => {
     if (e) e.preventDefault();
     if ((!inputText.trim() && !mediaUrl) || !activeChat) return;
 
-    const content = inputText.trim();
+    const content = inputText.trim() || (originalName ? `[file:${originalName}]` : '');
     const replyTarget = replyingTo;
     setInputText('');
     setReplyingTo(null);
+
 
     // Meta AI Mode Handling
     if (activeChat.id === 'meta-ai-chat-id') {
@@ -404,24 +405,27 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
     }
   };
 
-  const handleFileUpload = (e) => {
+  const handleFileUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
+    // Reset input so same file can be selected again
+    e.target.value = '';
 
     setUploading(true);
-    const reader = new FileReader();
-    reader.onload = async () => {
-      try {
-        const uploaded = await uploadMedia(reader.result, file.name, file.type);
-        await handleSend(null, uploaded.url, uploaded.type);
-      } catch (err) {
-        console.error('Upload failed:', err);
-      } finally {
-        setUploading(false);
-      }
-    };
-    reader.readAsDataURL(file);
+    try {
+      const uploaded = await uploadMedia(file);
+      const mediaUrl = uploaded.mediaUrl || uploaded.url;
+      const mediaType = uploaded.mediaType || uploaded.type;
+      const originalName = uploaded.originalName || file.name;
+      await handleSend(null, mediaUrl, mediaType, originalName);
+    } catch (err) {
+      console.error('Upload failed:', err);
+      alert('Upload failed: ' + (err.message || 'Unknown error'));
+    } finally {
+      setUploading(false);
+    }
   };
+
 
   const startCall = (isVideo) => {
     if (!activeChat) return;
@@ -863,15 +867,45 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
                 {!isDeleted && mediaUrl && (
                   <div style={{ marginBottom: '6px' }}>
                     {mediaType === 'image' ? (
-                      <img src={mediaUrl} alt="Attachment" style={{ maxWidth: '100%', borderRadius: '6px', maxHeight: '240px', objectFit: 'cover' }} />
+                      <img src={mediaUrl} alt="Attachment" style={{ maxWidth: '100%', borderRadius: '6px', maxHeight: '240px', objectFit: 'cover', display: 'block' }} />
                     ) : mediaType === 'video' ? (
-                      <video controls src={mediaUrl} style={{ maxWidth: '100%', borderRadius: '6px', maxHeight: '240px' }} />
+                      <video controls src={mediaUrl} style={{ maxWidth: '100%', borderRadius: '6px', maxHeight: '240px', display: 'block' }} />
                     ) : mediaType === 'audio' ? (
                       <audio controls src={mediaUrl} style={{ width: '220px' }} />
                     ) : (
-                      <a href={mediaUrl} download style={{ color: 'var(--wa-accent)', fontSize: '13px', textDecoration: 'underline' }}>
-                        📎 Download Attachment
-                      </a>
+                      <div style={{
+                        display: 'flex', alignItems: 'center', gap: '10px',
+                        backgroundColor: 'rgba(0,0,0,0.2)', borderRadius: '8px',
+                        padding: '8px 12px', marginBottom: '4px'
+                      }}>
+                        <span style={{ fontSize: '22px' }}>
+                          {mediaType === 'document' ? '📄' : '📎'}
+                        </span>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: '13px', color: '#e9edef', fontWeight: '500', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {msg.content && msg.content.startsWith('[file:') 
+                              ? msg.content.replace('[file:', '').replace(']', '') 
+                              : (mediaUrl.split('/').pop() || 'File')}
+                          </div>
+                          <div style={{ fontSize: '11px', color: '#8696a0' }}>{mediaType === 'document' ? 'Document' : 'File'}</div>
+                        </div>
+                        <a
+                          href={mediaUrl}
+                          download
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                          style={{
+                            backgroundColor: '#00a884', color: '#111b21',
+                            border: 'none', borderRadius: '6px', padding: '5px 10px',
+                            fontSize: '12px', fontWeight: 'bold', textDecoration: 'none',
+                            cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px',
+                            flexShrink: 0
+                          }}
+                        >
+                          ⬇ Download
+                        </a>
+                      </div>
                     )}
                   </div>
                 )}
