@@ -8,6 +8,13 @@ const registerCallHandlers = require('./callSocket');
 
 const onlineUsers = new Map(); // userId -> Set of socketIds
 
+function registerUserSocket(onlineUsers, userId, socketId) {
+  if (!onlineUsers.has(userId)) {
+    onlineUsers.set(userId, new Set());
+  }
+  onlineUsers.get(userId).add(socketId);
+}
+
 function initSockets(server) {
   const io = new Server(server, {
     cors: {
@@ -34,7 +41,16 @@ function initSockets(server) {
   });
 
   io.on('connection', (socket) => {
-    let currentUserId = socket.userId || null;
+    let currentUserId = socket.userId ? parseInt(socket.userId, 10) : null;
+
+    // Auto-register from JWT token immediately on connection
+    if (currentUserId && !isNaN(currentUserId)) {
+      registerUserSocket(onlineUsers, currentUserId, socket.id);
+      socket.userId = currentUserId;
+      console.log(`Socket Registry: User ${currentUserId} auto-registered from JWT with socket ${socket.id}`);
+      pool.query('UPDATE users SET is_online = TRUE WHERE id = $1', [currentUserId]).catch(() => {});
+      io.emit('online_users_list', Array.from(onlineUsers.keys()));
+    }
 
     // Handshake or explicit connection message
     socket.on('user_connected', async (userId) => {
@@ -44,10 +60,7 @@ function initSockets(server) {
       currentUserId = activeUserId;
       socket.userId = activeUserId;
 
-      if (!onlineUsers.has(activeUserId)) {
-        onlineUsers.set(activeUserId, new Set());
-      }
-      onlineUsers.get(activeUserId).add(socket.id);
+      registerUserSocket(onlineUsers, activeUserId, socket.id);
 
       console.log(`Socket Registry: User ${activeUserId} registered with socket ${socket.id}`);
 

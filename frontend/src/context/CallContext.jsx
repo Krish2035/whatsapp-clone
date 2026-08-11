@@ -284,7 +284,19 @@ export function CallProvider({ children }) {
 
     // 4. Handle Call Rejected Signal
     const handleCallRejected = (data) => {
-      console.log('Call Rejected event received');
+      const reason = data?.reason || '';
+      console.log('Call Rejected event received, reason:', reason);
+      if (reason === 'offline') {
+        // User is offline - show brief status message but keep call active briefly
+        console.warn('CallContext: Callee is offline. Ending call...');
+      }
+      cleanupCall();
+      loadCallHistory();
+    };
+
+    // 4b. Handle Call Missed
+    const handleCallMissed = (data) => {
+      console.log('Call Missed event received:', data?.reason);
       cleanupCall();
       loadCallHistory();
     };
@@ -313,6 +325,8 @@ export function CallProvider({ children }) {
     socket.on('call_ended', handleCallEnded);
     socket.on('CALL_ENDED', handleCallEnded);
     socket.on('call_media_toggle', handleMediaToggle);
+    socket.on('CALL_MISSED', handleCallMissed);
+
 
     return () => {
       socket.off('call_user', handleIncomingCall);
@@ -326,7 +340,9 @@ export function CallProvider({ children }) {
       socket.off('call_ended', handleCallEnded);
       socket.off('CALL_ENDED', handleCallEnded);
       socket.off('call_media_toggle', handleMediaToggle);
+      socket.off('CALL_MISSED', handleCallMissed);
     };
+
   }, [user?.id]);
 
   const unlockAudioContext = () => {
