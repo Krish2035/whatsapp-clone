@@ -107,7 +107,15 @@ const messageService = {
             'sender_name', ru.username
           )
           ELSE NULL 
-        END as reply_to
+        END as reply_to,
+        COALESCE(
+          (
+            SELECT json_agg(json_build_object('id', mr.id, 'user_id', mr.user_id, 'emoji', mr.emoji))
+            FROM message_reactions mr
+            WHERE mr.message_id = m.id
+          ),
+          '[]'::json
+        ) as reactions
        FROM messages m
        JOIN users u ON m.sender_id = u.id
        LEFT JOIN messages rm ON m.reply_to_id = rm.id
@@ -167,25 +175,32 @@ const messageService = {
    * Add or toggle emoji reaction on a message
    */
   async addReaction(messageId, userId, emoji) {
+    const numMsgId = parseInt(messageId, 10);
+    const numUserId = parseInt(userId, 10);
+
+    if (isNaN(numMsgId) || isNaN(numUserId)) {
+      return { messageId, userId, emoji, removed: false };
+    }
+
     const existing = await pool.query(
       'SELECT id, emoji FROM message_reactions WHERE message_id = $1 AND user_id = $2',
-      [messageId, userId]
+      [numMsgId, numUserId]
     );
 
     if (existing.rows.length > 0) {
       if (existing.rows[0].emoji === emoji) {
         await pool.query('DELETE FROM message_reactions WHERE id = $1', [existing.rows[0].id]);
-        return { messageId, userId, emoji: null, removed: true };
+        return { messageId: numMsgId, userId: numUserId, emoji: null, removed: true };
       } else {
         await pool.query('UPDATE message_reactions SET emoji = $1 WHERE id = $2', [emoji, existing.rows[0].id]);
-        return { messageId, userId, emoji, removed: false };
+        return { messageId: numMsgId, userId: numUserId, emoji, removed: false };
       }
     } else {
       await pool.query(
         'INSERT INTO message_reactions (message_id, user_id, emoji) VALUES ($1, $2, $3)',
-        [messageId, userId, emoji]
+        [numMsgId, numUserId, emoji]
       );
-      return { messageId, userId, emoji, removed: false };
+      return { messageId: numMsgId, userId: numUserId, emoji, removed: false };
     }
   },
 
