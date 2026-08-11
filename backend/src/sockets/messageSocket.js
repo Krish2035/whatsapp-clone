@@ -56,9 +56,21 @@ module.exports = function registerMessageHandlers(io, socket, onlineUsers) {
   // Edit Message Real-Time Dispatch
   socket.on('edit_message', async ({ messageId, chatId, content }, callback) => {
     try {
-      const userId = socket.userId;
+      const userId = socket.userId || socket.user?.id;
       const updated = await messageService.editMessage(messageId, userId, content);
+      
       io.to(`chat_${chatId}`).emit('message_edited', updated);
+
+      const senderId = updated.senderId || updated.sender_id;
+      const receiverId = updated.receiverId || updated.receiver_id;
+
+      if (senderId && onlineUsers.has(parseInt(senderId, 10))) {
+        onlineUsers.get(parseInt(senderId, 10)).forEach((sId) => io.to(sId).emit('message_edited', updated));
+      }
+      if (receiverId && onlineUsers.has(parseInt(receiverId, 10))) {
+        onlineUsers.get(parseInt(receiverId, 10)).forEach((sId) => io.to(sId).emit('message_edited', updated));
+      }
+
       if (typeof callback === 'function') callback({ status: 'ok', message: updated });
     } catch (err) {
       console.error('Socket edit_message error:', err.message);
@@ -69,9 +81,22 @@ module.exports = function registerMessageHandlers(io, socket, onlineUsers) {
   // Delete Message Real-Time Dispatch
   socket.on('delete_message', async ({ messageId, chatId }, callback) => {
     try {
-      const userId = socket.userId;
+      const userId = socket.userId || socket.user?.id;
       const deleted = await messageService.deleteMessage(messageId, userId);
-      io.to(`chat_${chatId}`).emit('message_deleted', { messageId, chatId, content: deleted.content });
+      const payload = { messageId, chatId, content: deleted.content };
+      
+      io.to(`chat_${chatId}`).emit('message_deleted', payload);
+
+      const senderId = deleted.senderId || deleted.sender_id;
+      const receiverId = deleted.receiverId || deleted.receiver_id;
+
+      if (senderId && onlineUsers.has(parseInt(senderId, 10))) {
+        onlineUsers.get(parseInt(senderId, 10)).forEach((sId) => io.to(sId).emit('message_deleted', payload));
+      }
+      if (receiverId && onlineUsers.has(parseInt(receiverId, 10))) {
+        onlineUsers.get(parseInt(receiverId, 10)).forEach((sId) => io.to(sId).emit('message_deleted', payload));
+      }
+
       if (typeof callback === 'function') callback({ status: 'ok', message: deleted });
     } catch (err) {
       console.error('Socket delete_message error:', err.message);

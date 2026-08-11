@@ -50,19 +50,31 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
   const typingTimeoutRef = useRef(null);
 
   useEffect(() => {
-    if (activeChat) {
+    if (activeChat && activeChat.id) {
       loadMessages(activeChat.id);
       setIsContactInfoOpen(false);
       setReplyingTo(null);
       setEditingMsgId(null);
       setActiveMenuMsgId(null);
       setActiveReactionMsgId(null);
+
+      // Join Socket.IO Chat Room for Real-Time Updates
+      const socket = socketService.getSocket() || socketService.connect(user?.id);
+      if (socket && activeChat.id) {
+        socket.emit('join_chat', activeChat.id);
+        socket.emit('join_conversation', activeChat.id);
+      }
     }
   }, [activeChat]);
 
   useEffect(() => {
     const socket = socketService.connect(user?.id);
     if (!socket) return;
+
+    if (activeChat && activeChat.id) {
+      socket.emit('join_chat', activeChat.id);
+      socket.emit('join_conversation', activeChat.id);
+    }
 
     // Listen to real-time incoming messages
     const handleReceiveMessage = (newMsg) => {
@@ -248,6 +260,10 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
           if (realId) {
             targetChatId = realId;
             activeChat.id = realId;
+            if (socket) {
+              socket.emit('join_chat', realId);
+              socket.emit('join_conversation', realId);
+            }
           }
         }
       }
@@ -298,33 +314,40 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
 
   const handleSaveEdit = async (msgId) => {
     if (!editText.trim()) return;
+    const newContent = editText.trim();
+    setEditingMsgId(null);
+    setEditText('');
+
+    // Optimistic UI update
+    setMessages((prev) =>
+      prev.map((m) => (String(m.id) === String(msgId) ? { ...m, content: newContent, isEdited: true, is_edited: true } : m))
+    );
+
     try {
-      const updated = await apiEditMessage(msgId, editText.trim());
-      setMessages((prev) =>
-        prev.map((m) => (String(m.id) === String(msgId) ? { ...m, content: editText.trim(), isEdited: true, is_edited: true } : m))
-      );
+      await apiEditMessage(msgId, newContent);
       const socket = socketService.getSocket();
       if (socket && activeChat) {
-        socket.emit('edit_message', { messageId: msgId, chatId: activeChat.id, content: editText.trim() });
+        socket.emit('edit_message', { messageId: msgId, chatId: activeChat.id, content: newContent });
       }
-      setEditingMsgId(null);
-      setEditText('');
     } catch (err) {
       console.error('Failed to edit message:', err);
     }
   };
 
   const handleDeleteMsg = async (msgId) => {
+    setActiveMenuMsgId(null);
+
+    // Optimistic UI update
+    setMessages((prev) =>
+      prev.map((m) => (String(m.id) === String(msgId) ? { ...m, content: 'This message was deleted', isDeleted: true, is_deleted: true, mediaUrl: null, media_url: null } : m))
+    );
+
     try {
       await apiDeleteMessage(msgId);
-      setMessages((prev) =>
-        prev.map((m) => (String(m.id) === String(msgId) ? { ...m, content: 'This message was deleted', isDeleted: true, is_deleted: true, mediaUrl: null, media_url: null } : m))
-      );
       const socket = socketService.getSocket();
       if (socket && activeChat) {
         socket.emit('delete_message', { messageId: msgId, chatId: activeChat.id });
       }
-      setActiveMenuMsgId(null);
     } catch (err) {
       console.error('Failed to delete message:', err);
     }
@@ -671,7 +694,11 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
                     {QUICK_EMOJIS.map((emoji) => (
                       <button
                         key={emoji}
-                        onClick={() => handleToggleReaction(msg.id, emoji)}
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleToggleReaction(msg.id, emoji);
+                        }}
                         style={{
                           background: 'none',
                           border: 'none',
@@ -690,8 +717,9 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
                   </div>
                 )}
 
-                {/* Top-Right Small Chevron Down Triangle/Arrow (v) Button (Matches Screenshot 2) */}
+                {/* Top-Right Small Chevron Down Triangle/Arrow (v) Button */}
                 <button
+                  type="button"
                   onClick={(e) => {
                     e.stopPropagation();
                     setActiveMenuMsgId(isMenuOpenThis ? null : msg.id);
@@ -738,7 +766,10 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
                     }}
                   >
                     <div
-                      onClick={() => handleSetReply(msg)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleSetReply(msg);
+                      }}
                       style={{ padding: '8px 14px', fontSize: '13px', color: '#e9edef', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}
                     >
                       ↩️ Reply
@@ -746,7 +777,8 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
 
                     {!isDeleted && (
                       <div
-                        onClick={() => {
+                        onClick={(e) => {
+                          e.stopPropagation();
                           setActiveReactionMsgId(msg.id);
                           setActiveMenuMsgId(null);
                         }}
@@ -759,13 +791,19 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
                     {isMe && !isDeleted && (
                       <>
                         <div
-                          onClick={() => handleStartEdit(msg)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleStartEdit(msg);
+                          }}
                           style={{ padding: '8px 14px', fontSize: '13px', color: '#e9edef', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', borderTop: '1px solid #2a3942' }}
                         >
                           ✏️ Edit
                         </div>
                         <div
-                          onClick={() => handleDeleteMsg(msg.id)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteMsg(msg.id);
+                          }}
                           style={{ padding: '8px 14px', fontSize: '13px', color: '#f87171', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}
                         >
                           🗑️ Delete
@@ -816,11 +854,23 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
 
                 {/* Text Content / Edit Input Mode */}
                 {isEditingThis ? (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', margin: '4px 0' }}>
+                  <div 
+                    onClick={(e) => e.stopPropagation()}
+                    style={{ display: 'flex', flexDirection: 'column', gap: '6px', margin: '4px 0' }}
+                  >
                     <input
                       type="text"
                       value={editText}
                       onChange={(e) => setEditText(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleSaveEdit(msg.id);
+                        } else if (e.key === 'Escape') {
+                          setEditingMsgId(null);
+                        }
+                      }}
+                      onClick={(e) => e.stopPropagation()}
                       style={{
                         backgroundColor: 'var(--wa-bg-input)', border: '1px solid var(--wa-accent)',
                         borderRadius: '4px', padding: '6px 10px', color: '#e9edef', fontSize: '14px', outline: 'none'
@@ -829,13 +879,21 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
                     />
                     <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
                       <button
-                        onClick={() => setEditingMsgId(null)}
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setEditingMsgId(null);
+                        }}
                         style={{ background: 'none', border: 'none', color: '#8696a0', fontSize: '12px', cursor: 'pointer' }}
                       >
                         Cancel
                       </button>
                       <button
-                        onClick={() => handleSaveEdit(msg.id)}
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleSaveEdit(msg.id);
+                        }}
                         style={{ backgroundColor: '#00a884', border: 'none', borderRadius: '4px', color: '#111b21', fontWeight: 'bold', padding: '4px 10px', fontSize: '12px', cursor: 'pointer' }}
                       >
                         Save

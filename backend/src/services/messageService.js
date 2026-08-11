@@ -114,12 +114,15 @@ const messageService = {
    * Edit message content (only allowed by original sender)
    */
   async editMessage(messageId, userId, newContent) {
+    const numMsgId = parseInt(messageId, 10);
+    const numUserId = parseInt(userId, 10);
+
     const result = await pool.query(
       `UPDATE messages
        SET content = $1, is_edited = TRUE, updated_at = CURRENT_TIMESTAMP
        WHERE id = $2 AND sender_id = $3
        RETURNING id, chat_id as "conversationId", sender_id as "senderId", receiver_id as "receiverId", content, is_edited as "isEdited", updated_at as "updatedAt"`,
-      [newContent, messageId, userId]
+      [newContent, numMsgId, numUserId]
     );
 
     if (result.rows.length === 0) {
@@ -132,12 +135,15 @@ const messageService = {
    * Delete message (soft delete for everyone, only allowed by original sender)
    */
   async deleteMessage(messageId, userId) {
+    const numMsgId = parseInt(messageId, 10);
+    const numUserId = parseInt(userId, 10);
+
     const result = await pool.query(
       `UPDATE messages
        SET content = 'This message was deleted', is_deleted = TRUE, media_url = NULL, updated_at = CURRENT_TIMESTAMP
        WHERE id = $1 AND sender_id = $2
        RETURNING id, chat_id as "conversationId", sender_id as "senderId", receiver_id as "receiverId", content, is_deleted as "isDeleted", updated_at as "updatedAt"`,
-      [messageId, userId]
+      [numMsgId, numUserId]
     );
 
     if (result.rows.length === 0) {
