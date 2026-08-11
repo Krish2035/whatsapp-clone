@@ -79,6 +79,25 @@ module.exports = function registerMessageHandlers(io, socket, onlineUsers) {
     }
   });
 
+  // Reaction Dispatch Handler
+  socket.on('send_reaction', async ({ messageId, chatId, emoji }, callback) => {
+    try {
+      const userId = socket.userId || socket.user?.id;
+      const res = await messageService.addReaction(messageId, userId, emoji);
+      io.to(`chat_${chatId}`).emit('reaction_updated', {
+        messageId,
+        chatId,
+        userId,
+        emoji: res.emoji,
+        removed: res.removed
+      });
+      if (typeof callback === 'function') callback({ status: 'ok', reaction: res });
+    } catch (err) {
+      console.error('Socket send_reaction error:', err.message);
+      if (typeof callback === 'function') callback({ status: 'error', error: err.message });
+    }
+  });
+
   // Message Delivered Status Update
   socket.on('mark_delivered', async ({ messageId }) => {
     try {

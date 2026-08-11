@@ -13,9 +13,10 @@ import {
   createChat 
 } from '../services/api';
 import { socketService } from '../services/socket';
-import EmojiPickerModal from './EmojiPickerModal';
 import ContactInfoSidebar from './ContactInfoSidebar';
 import { formatTimestamp } from '../utils/dateUtils';
+
+const QUICK_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
 
 export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, onBack }) {
   const { user } = useAuth();
@@ -35,9 +36,8 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
   // Dropdown Context Menu State
   const [activeMenuMsgId, setActiveMenuMsgId] = useState(null);
 
-  // Reaction Picker State
-  const [emojiPickerPos, setEmojiPickerPos] = useState(null);
-  const [targetMsgId, setTargetMsgId] = useState(null);
+  // Reaction Bar Floating State (per message ID)
+  const [activeReactionMsgId, setActiveReactionMsgId] = useState(null);
 
   // File Upload State
   const [uploading, setUploading] = useState(false);
@@ -56,6 +56,7 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
       setReplyingTo(null);
       setEditingMsgId(null);
       setActiveMenuMsgId(null);
+      setActiveReactionMsgId(null);
     }
   }, [activeChat]);
 
@@ -107,7 +108,7 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
       }
     };
 
-    // Listen to read updates (when recipient opens/reads messages)
+    // Listen to read updates
     const handleReadUpdate = ({ chatId, userId }) => {
       if (activeChat && String(chatId) === String(activeChat.id) && String(userId) !== String(user?.id)) {
         setMessages((prev) =>
@@ -120,13 +121,14 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
     };
 
     // Listen to reaction updates
-    const handleReactionUpdate = ({ messageId, userId, emoji }) => {
+    const handleReactionUpdate = ({ messageId, userId, emoji, removed }) => {
       setMessages((prev) =>
         prev.map((m) => {
           if (String(m.id) === String(messageId)) {
             const existing = m.reactions || [];
-            const filtered = existing.filter((r) => r.user_id !== userId);
-            return { ...m, reactions: [...filtered, { user_id: userId, emoji }] };
+            const filtered = existing.filter((r) => String(r.user_id || r.userId) !== String(userId));
+            const newReactions = removed || !emoji ? filtered : [...filtered, { user_id: userId, emoji }];
+            return { ...m, reactions: newReactions };
           }
           return m;
         })
@@ -238,7 +240,6 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
     try {
       let targetChatId = activeChat.id;
 
-      // Handle temporary chat IDs by resolving/creating real DB chat UUID
       if (String(targetChatId).startsWith('temp-')) {
         const otherParticipant = activeChat.participants?.find((p) => String(p.id) !== String(user?.id));
         if (otherParticipant) {
@@ -272,7 +273,6 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
         return [...prev, newMsg];
       });
 
-      // Emit live message via Socket.IO
       if (socket) socket.emit('send_message', newMsg);
       if (onMessageSent) onMessageSent();
     } catch (err) {
@@ -330,6 +330,37 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
     }
   };
 
+  const handleToggleReaction = async (msgId, emoji) => {
+    try {
+      setMessages((prev) =>
+        prev.map((m) => {
+          if (String(m.id) === String(msgId)) {
+            const existing = m.reactions || [];
+            const hasEmoji = existing.some((r) => String(r.user_id || r.userId) === String(user?.id) && r.emoji === emoji);
+            const filtered = existing.filter((r) => String(r.user_id || r.userId) !== String(user?.id));
+            const newReactions = hasEmoji ? filtered : [...filtered, { user_id: user?.id, emoji }];
+            return { ...m, reactions: newReactions };
+          }
+          return m;
+        })
+      );
+
+      await apiAddReaction(msgId, emoji);
+      const socket = socketService.getSocket();
+      if (socket && activeChat) {
+        socket.emit('send_reaction', {
+          messageId: msgId,
+          chatId: activeChat.id,
+          emoji,
+        });
+      }
+    } catch (err) {
+      console.error('Failed to add reaction:', err);
+    } finally {
+      setActiveReactionMsgId(null);
+    }
+  };
+
   const handleFileUpload = (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -349,25 +380,6 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
     reader.readAsDataURL(file);
   };
 
-  const handleSelectEmojiReaction = async (emoji) => {
-    if (!targetMsgId) return;
-    try {
-      await apiAddReaction(targetMsgId, emoji);
-      const socket = socketService.getSocket();
-      if (socket && activeChat) {
-        socket.emit('send_reaction', {
-          messageId: targetMsgId,
-          chatId: activeChat.id,
-          userId: user?.id,
-          emoji,
-        });
-      }
-    } catch (err) {
-      console.error('Reaction failed:', err);
-    }
-  };
-
-  // Call Handler with robust user recipient resolution
   const startCall = (isVideo) => {
     if (!activeChat) return;
 
@@ -580,7 +592,10 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
 
       {/* Messages Scroll Area */}
       <div 
-        onClick={() => setActiveMenuMsgId(null)}
+        onClick={() => {
+          setActiveMenuMsgId(null);
+          setActiveReactionMsgId(null);
+        }}
         style={{
           flex: 1, overflowY: 'auto', padding: '16px 24px',
           display: 'flex', flexDirection: 'column', gap: '10px',
@@ -614,6 +629,7 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
             const isEdited = Boolean(msg.is_edited || msg.isEdited);
             const isEditingThis = editingMsgId === msg.id;
             const isMenuOpenThis = activeMenuMsgId === msg.id;
+            const isReactionOpenThis = activeReactionMsgId === msg.id;
 
             const replyObj = msg.reply_to || msg.replyTo;
 
@@ -624,14 +640,141 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
                 style={{
                   alignSelf: isMe ? 'flex-end' : 'flex-start',
                   maxWidth: '75%',
+                  minWidth: '140px',
                   backgroundColor: isMe ? '#005c4b' : '#202c33',
                   color: 'var(--wa-text-primary)',
-                  padding: '8px 12px 6px 12px',
+                  padding: '8px 26px 6px 12px',
                   borderRadius: isMe ? '8px 0px 8px 8px' : '0px 8px 8px 8px',
                   boxShadow: '0 1px 2px rgba(0,0,0,0.2)',
                   position: 'relative'
                 }}
               >
+                {/* Floating Quick Reaction Bar (Attached directly above the bubble) */}
+                {isReactionOpenThis && (
+                  <div
+                    onClick={(e) => e.stopPropagation()}
+                    style={{
+                      position: 'absolute',
+                      top: '-42px',
+                      right: isMe ? '0' : 'auto',
+                      left: isMe ? 'auto' : '0',
+                      backgroundColor: '#233138',
+                      borderRadius: '20px',
+                      padding: '4px 8px',
+                      boxShadow: '0 4px 16px rgba(0,0,0,0.5)',
+                      border: '1px solid #2a3942',
+                      display: 'flex',
+                      gap: '6px',
+                      zIndex: 120
+                    }}
+                  >
+                    {QUICK_EMOJIS.map((emoji) => (
+                      <button
+                        key={emoji}
+                        onClick={() => handleToggleReaction(msg.id, emoji)}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          fontSize: '18px',
+                          cursor: 'pointer',
+                          padding: '2px 4px',
+                          borderRadius: '50%',
+                          transition: 'transform 0.15s'
+                        }}
+                        onMouseEnter={(e) => (e.target.style.transform = 'scale(1.35)')}
+                        onMouseLeave={(e) => (e.target.style.transform = 'scale(1)')}
+                      >
+                        {emoji}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* Top-Right Small Chevron Down Triangle/Arrow (v) Button (Matches Screenshot 2) */}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setActiveMenuMsgId(isMenuOpenThis ? null : msg.id);
+                    setActiveReactionMsgId(null);
+                  }}
+                  style={{
+                    position: 'absolute',
+                    top: '4px',
+                    right: '4px',
+                    background: 'none',
+                    border: 'none',
+                    color: '#aebac1',
+                    fontSize: '11px',
+                    cursor: 'pointer',
+                    padding: '2px 4px',
+                    borderRadius: '50%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    zIndex: 5
+                  }}
+                  title="Message Options"
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M7 10l5 5 5-5z"/>
+                  </svg>
+                </button>
+
+                {/* Context Action Menu Dropdown Window */}
+                {isMenuOpenThis && (
+                  <div
+                    onClick={(e) => e.stopPropagation()}
+                    style={{
+                      position: 'absolute',
+                      top: '24px',
+                      right: '4px',
+                      backgroundColor: '#233138',
+                      border: '1px solid #2a3942',
+                      borderRadius: '8px',
+                      boxShadow: '0 4px 16px rgba(0,0,0,0.5)',
+                      zIndex: 100,
+                      minWidth: '150px',
+                      padding: '4px 0'
+                    }}
+                  >
+                    <div
+                      onClick={() => handleSetReply(msg)}
+                      style={{ padding: '8px 14px', fontSize: '13px', color: '#e9edef', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}
+                    >
+                      ↩️ Reply
+                    </div>
+
+                    {!isDeleted && (
+                      <div
+                        onClick={() => {
+                          setActiveReactionMsgId(msg.id);
+                          setActiveMenuMsgId(null);
+                        }}
+                        style={{ padding: '8px 14px', fontSize: '13px', color: '#e9edef', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}
+                      >
+                        😀 React
+                      </div>
+                    )}
+
+                    {isMe && !isDeleted && (
+                      <>
+                        <div
+                          onClick={() => handleStartEdit(msg)}
+                          style={{ padding: '8px 14px', fontSize: '13px', color: '#e9edef', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', borderTop: '1px solid #2a3942' }}
+                        >
+                          ✏️ Edit
+                        </div>
+                        <div
+                          onClick={() => handleDeleteMsg(msg.id)}
+                          style={{ padding: '8px 14px', fontSize: '13px', color: '#f87171', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}
+                        >
+                          🗑️ Delete
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
+
                 {/* Group Sender Badge */}
                 {!isMe && activeChat.is_group && (
                   <div style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--wa-accent)', marginBottom: '4px' }}>
@@ -700,99 +843,35 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
                     </div>
                   </div>
                 ) : (
-                  <div style={{ fontStyle: isDeleted ? 'italic' : 'normal', color: isDeleted ? '#8696a0' : 'inherit' }}>
+                  <div style={{ fontStyle: isDeleted ? 'italic' : 'normal', color: isDeleted ? '#8696a0' : 'inherit', paddingRight: '12px' }}>
                     {isDeleted ? '🚫 This message was deleted' : renderStructuredMessage(msg.content)}
                   </div>
                 )}
 
-                {/* Bottom Bar: Action Trigger & Timestamp */}
+                {/* Timestamp, Edited Badge & Ticks */}
                 <div style={{
-                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                  marginTop: '4px', gap: '8px'
+                  display: 'flex', justifyContent: 'flex-end', alignItems: 'center',
+                  marginTop: '4px', gap: '4px', fontSize: '10px', color: '#8696a0'
                 }}>
-                  {/* Action Menu Button (Reply, Edit, Delete, React) */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', position: 'relative' }}>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setActiveMenuMsgId(isMenuOpenThis ? null : msg.id);
-                      }}
-                      style={{
-                        background: 'none', border: 'none', color: 'var(--wa-text-muted)',
-                        fontSize: '13px', cursor: 'pointer', padding: '2px 4px', borderRadius: '4px'
-                      }}
-                      title="Message Options"
-                    >
-                      ⋮
-                    </button>
-
-                    {/* Context Action Menu Dropdown */}
-                    {isMenuOpenThis && (
-                      <div
-                        onClick={(e) => e.stopPropagation()}
-                        style={{
-                          position: 'absolute', bottom: '24px', left: isMe ? 'auto' : '0', right: isMe ? '0' : 'auto',
-                          backgroundColor: '#233138', border: '1px solid #2a3942', borderRadius: '8px',
-                          boxShadow: '0 4px 16px rgba(0,0,0,0.5)', zIndex: 100, minWidth: '150px', padding: '4px 0'
-                        }}
-                      >
-                        <div
-                          onClick={() => handleSetReply(msg)}
-                          style={{ padding: '8px 14px', fontSize: '13px', color: '#e9edef', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}
-                        >
-                          ↩️ Reply
-                        </div>
-
-                        {!isDeleted && (
-                          <div
-                            onClick={(e) => {
-                              const rect = e.currentTarget.getBoundingClientRect();
-                              setEmojiPickerPos({ top: rect.top - 45, left: rect.left });
-                              setTargetMsgId(msg.id);
-                              setActiveMenuMsgId(null);
-                            }}
-                            style={{ padding: '8px 14px', fontSize: '13px', color: '#e9edef', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}
-                          >
-                            😀 React
-                          </div>
-                        )}
-
-                        {isMe && !isDeleted && (
-                          <>
-                            <div
-                              onClick={() => handleStartEdit(msg)}
-                              style={{ padding: '8px 14px', fontSize: '13px', color: '#e9edef', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', borderTop: '1px solid #2a3942' }}
-                            >
-                              ✏️ Edit
-                            </div>
-                            <div
-                              onClick={() => handleDeleteMsg(msg.id)}
-                              style={{ padding: '8px 14px', fontSize: '13px', color: '#f87171', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}
-                            >
-                              🗑️ Delete
-                            </div>
-                          </>
-                        )}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Timestamp, Edited Badge & Ticks */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '10px', color: '#8696a0' }}>
-                    {isEdited && !isDeleted && <span style={{ fontStyle: 'italic', marginRight: '2px' }}>(edited)</span>}
-                    <span>{formattedTime}</span>
-                    {isMe && renderTick(msg.status)}
-                  </div>
+                  {isEdited && !isDeleted && <span style={{ fontStyle: 'italic', marginRight: '2px' }}>(edited)</span>}
+                  <span>{formattedTime}</span>
+                  {isMe && renderTick(msg.status)}
                 </div>
 
-                {/* Emoji Reaction Badges */}
+                {/* Emoji Reaction Badges (Positioned cleanly at bottom-right corner) */}
                 {msg.reactions && msg.reactions.length > 0 && (
                   <div style={{
                     position: 'absolute', bottom: '-10px', right: isMe ? 'auto' : '8px', left: isMe ? '8px' : 'auto',
-                    backgroundColor: 'var(--wa-bg-panel)', border: '1px solid var(--wa-border)',
-                    borderRadius: '12px', padding: '1px 6px', fontSize: '11px', boxShadow: '0 2px 4px rgba(0,0,0,0.3)'
+                    backgroundColor: '#233138', border: '1px solid #2a3942',
+                    borderRadius: '12px', padding: '1px 6px', fontSize: '12px', boxShadow: '0 2px 4px rgba(0,0,0,0.3)',
+                    display: 'flex', gap: '2px', alignItems: 'center'
                   }}>
-                    {msg.reactions.map((r) => r.emoji).join(' ')}
+                    {Array.from(new Set(msg.reactions.map((r) => r.emoji))).join(' ')}
+                    {msg.reactions.length > 1 && (
+                      <span style={{ fontSize: '10px', color: '#8696a0', marginLeft: '2px' }}>
+                        {msg.reactions.length}
+                      </span>
+                    )}
                   </div>
                 )}
               </div>
@@ -888,13 +967,6 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
           </svg>
         </button>
       </form>
-
-      {/* Emoji Picker Popup */}
-      <EmojiPickerModal
-        position={emojiPickerPos}
-        onSelectEmoji={handleSelectEmojiReaction}
-        onClose={() => setEmojiPickerPos(null)}
-      />
     </div>
 
     {/* Right Side Contact Info Panel */}

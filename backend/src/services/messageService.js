@@ -147,6 +147,32 @@ const messageService = {
   },
 
   /**
+   * Add or toggle emoji reaction on a message
+   */
+  async addReaction(messageId, userId, emoji) {
+    const existing = await pool.query(
+      'SELECT id, emoji FROM message_reactions WHERE message_id = $1 AND user_id = $2',
+      [messageId, userId]
+    );
+
+    if (existing.rows.length > 0) {
+      if (existing.rows[0].emoji === emoji) {
+        await pool.query('DELETE FROM message_reactions WHERE id = $1', [existing.rows[0].id]);
+        return { messageId, userId, emoji: null, removed: true };
+      } else {
+        await pool.query('UPDATE message_reactions SET emoji = $1 WHERE id = $2', [emoji, existing.rows[0].id]);
+        return { messageId, userId, emoji, removed: false };
+      }
+    } else {
+      await pool.query(
+        'INSERT INTO message_reactions (message_id, user_id, emoji) VALUES ($1, $2, $3)',
+        [messageId, userId, emoji]
+      );
+      return { messageId, userId, emoji, removed: false };
+    }
+  },
+
+  /**
    * Update message status to 'delivered'
    */
   async markMessageDelivered(messageId, userId) {

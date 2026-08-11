@@ -67,6 +67,22 @@ const messageController = {
     }
   },
 
+  async addReaction(req, res) {
+    try {
+      const userId = req.user.id;
+      const { messageId, emoji } = req.body;
+
+      if (!messageId || !emoji) {
+        return res.status(400).json({ error: 'messageId and emoji are required.' });
+      }
+
+      const result = await messageService.addReaction(messageId, userId, emoji);
+      res.json({ reaction: result });
+    } catch (err) {
+      res.status(400).json({ error: err.message });
+    }
+  },
+
   async markDelivered(req, res) {
     try {
       const userId = req.user.id;
