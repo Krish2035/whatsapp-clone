@@ -481,7 +481,9 @@ export default function Sidebar({ chats = [], activeChatId, onSelectChat, onChat
                 const unreadCount = parseInt(chat.unread_count || 0, 10);
                 const hasUnread = unreadCount > 0;
 
-                const lastSenderId = lastMsg?.senderId ?? lastMsg?.sender_id ?? lastMsg?.sender?.id;
+                const lastSenderId = typeof lastMsg?.sender === 'object' && lastMsg?.sender !== null
+                  ? lastMsg.sender.id
+                  : (lastMsg?.senderId ?? lastMsg?.sender_id ?? lastMsg?.sender);
                 const isLastMsgMine = Boolean(lastSenderId && user?.id && String(lastSenderId) === String(user?.id));
 
                 return (

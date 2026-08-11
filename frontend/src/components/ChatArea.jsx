@@ -517,7 +517,9 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
           </div>
         ) : (
           messages.map((msg, idx) => {
-            const senderId = msg.sender_id ?? msg.senderId ?? msg.sender?.id;
+            const senderId = typeof msg.sender === 'object' && msg.sender !== null
+              ? msg.sender.id
+              : (msg.sender_id ?? msg.senderId ?? msg.sender);
             const currentUserId = user?.id;
             const isMe = Boolean(senderId && currentUserId && String(senderId) === String(currentUserId));
 
