@@ -8,6 +8,7 @@ require('dotenv').config();
 let usePg = false;
 let pgPool = null;
 let sqliteDb = null;
+let initPromise = null;
 
 const dbHost = process.env.DB_HOST || 'localhost';
 const dbPort = parseInt(process.env.DB_PORT || '5432', 10);
@@ -30,50 +31,79 @@ function checkPgPort(host, port, timeoutMs = 500) {
   });
 }
 
-// Instant detection of PostgreSQL availability on startup
-(async () => {
-  if (process.env.DATABASE_URL) {
-    try {
-      console.log('Connecting to PostgreSQL via DATABASE_URL...');
-      pgPool = new Pool({
-        connectionString: process.env.DATABASE_URL,
-        ssl: process.env.DATABASE_URL.includes('sslmode=disable') ? false : { rejectUnauthorized: false },
-        connectionTimeoutMillis: 5000,
-      });
-      const client = await pgPool.connect();
-      client.release();
-      usePg = true;
-      console.log('✅ Connected to Cloud PostgreSQL Database successfully.');
-      return;
-    } catch (err) {
-      console.error('❌ Cloud PostgreSQL connection failed:', err.message);
+async function ensurePgSchema(poolInstance) {
+  try {
+    const schemaPath = path.join(__dirname, '../db/schema.sql');
+    if (fs.existsSync(schemaPath)) {
+      const schemaSql = fs.readFileSync(schemaPath, 'utf8');
+      const statements = schemaSql.split(';').map((s) => s.trim()).filter(Boolean);
+      for (const stmt of statements) {
+        try {
+          await poolInstance.query(stmt);
+        } catch (e) {
+          // Ignore duplicate table/index errors
+        }
+      }
+      console.log('✅ PostgreSQL Database schema verified/initialized automatically.');
     }
+  } catch (err) {
+    console.warn('Auto-schema verification notice:', err.message);
   }
+}
 
-  const isPgAvailable = await checkPgPort(dbHost, dbPort, 300);
-  if (isPgAvailable) {
-    try {
-      pgPool = new Pool({
-        host: dbHost,
-        port: dbPort,
-        user: process.env.DB_USER || 'postgres',
-        password: process.env.DB_PASSWORD || 'postgres',
-        database: process.env.DB_NAME || 'whatsapp_clone',
-        connectionTimeoutMillis: 2000,
-      });
-      const client = await pgPool.connect();
-      client.release();
-      usePg = true;
-      console.log('✅ Connected to Local PostgreSQL Database successfully.');
-      return;
-    } catch (err) {
-      console.log('ℹ️ Local PostgreSQL connection attempt failed. Using embedded SQLite database.');
-    }
-  } else {
-    console.log('ℹ️ Local SQLite database active (whatsapp_clone.db).');
+function ensureInit() {
+  if (!initPromise) {
+    initPromise = (async () => {
+      if (process.env.DATABASE_URL) {
+        try {
+          console.log('Connecting to Cloud PostgreSQL via DATABASE_URL...');
+          pgPool = new Pool({
+            connectionString: process.env.DATABASE_URL,
+            ssl: process.env.DATABASE_URL.includes('sslmode=disable') ? false : { rejectUnauthorized: false },
+            connectionTimeoutMillis: 5000,
+          });
+          const client = await pgPool.connect();
+          client.release();
+          usePg = true;
+          console.log('✅ Connected to Cloud PostgreSQL Database successfully.');
+          await ensurePgSchema(pgPool);
+          return;
+        } catch (err) {
+          console.error('❌ Cloud PostgreSQL connection failed:', err.message);
+        }
+      }
+
+      const isPgAvailable = await checkPgPort(dbHost, dbPort, 300);
+      if (isPgAvailable) {
+        try {
+          pgPool = new Pool({
+            host: dbHost,
+            port: dbPort,
+            user: process.env.DB_USER || 'postgres',
+            password: process.env.DB_PASSWORD || 'postgres',
+            database: process.env.DB_NAME || 'whatsapp_clone',
+            connectionTimeoutMillis: 2000,
+          });
+          const client = await pgPool.connect();
+          client.release();
+          usePg = true;
+          console.log('✅ Connected to Local PostgreSQL Database successfully.');
+          await ensurePgSchema(pgPool);
+          return;
+        } catch (err) {
+          console.log('ℹ️ Local PostgreSQL connection attempt failed. Using embedded SQLite database.');
+        }
+      } else {
+        console.log('ℹ️ Local SQLite database active (whatsapp_clone.db).');
+      }
+      initSqlite();
+    })();
   }
-  initSqlite();
-})();
+  return initPromise;
+}
+
+// Trigger initialization immediately
+ensureInit();
 
 function initSqlite() {
   if (sqliteDb) return;
@@ -151,6 +181,8 @@ function parseJsonFields(row) {
 
 const pool = {
   async query(text, params = []) {
+    await ensureInit();
+
     if (usePg) {
       return await pgPool.query(text, params);
     }
