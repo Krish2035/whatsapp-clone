@@ -364,7 +364,7 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
       setMessages((prev) =>
         prev.map((m) => {
           if (String(m.id) === String(msgId)) {
-            const existing = m.reactions || [];
+            const existing = Array.isArray(m.reactions) ? m.reactions : [];
             const hasEmoji = existing.some((r) => String(r.user_id || r.userId) === String(user?.id) && r.emoji === emoji);
             const filtered = existing.filter((r) => String(r.user_id || r.userId) !== String(user?.id));
             const newReactions = hasEmoji ? filtered : [...filtered, { user_id: user?.id, emoji }];
@@ -374,14 +374,15 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
         })
       );
 
-      await apiAddReaction(msgId, emoji);
       const socket = socketService.getSocket();
-      if (socket && activeChat) {
+      if (socket && activeChat && socket.connected) {
         socket.emit('send_reaction', {
           messageId: msgId,
           chatId: activeChat.id,
           emoji,
         });
+      } else {
+        await apiAddReaction(msgId, emoji);
       }
     } catch (err) {
       console.error('Failed to add reaction:', err);

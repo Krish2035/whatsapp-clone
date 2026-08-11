@@ -108,14 +108,27 @@ module.exports = function registerMessageHandlers(io, socket, onlineUsers) {
   socket.on('send_reaction', async ({ messageId, chatId, emoji }, callback) => {
     try {
       const userId = socket.userId || socket.user?.id;
+      if (!userId) {
+        throw new Error('User authentication missing on socket');
+      }
+
       const res = await messageService.addReaction(messageId, userId, emoji);
-      io.to(`chat_${chatId}`).emit('reaction_updated', {
+      const payload = {
         messageId,
         chatId,
         userId,
         emoji: res.emoji,
         removed: res.removed
-      });
+      };
+
+      io.to(`chat_${chatId}`).emit('reaction_updated', payload);
+
+      if (onlineUsers) {
+        onlineUsers.forEach((sSet) => {
+          sSet.forEach((sId) => io.to(sId).emit('reaction_updated', payload));
+        });
+      }
+
       if (typeof callback === 'function') callback({ status: 'ok', reaction: res });
     } catch (err) {
       console.error('Socket send_reaction error:', err.message);
