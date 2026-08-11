@@ -22,8 +22,10 @@ class SocketService {
     }
 
     if (!this.socket) {
+      const token = typeof localStorage !== 'undefined' ? localStorage.getItem('token') : null;
       console.log('SocketService: Connecting to socket origin:', SOCKET_URL || window.location.origin);
       this.socket = io(SOCKET_URL, {
+        auth: { token },
         transports: ['websocket', 'polling'],
         reconnection: true,
         reconnectionAttempts: 50,

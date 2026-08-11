@@ -101,9 +101,11 @@ export default function Sidebar({ chats = [], activeChatId, onSelectChat, onChat
 
       // Fetch or create official backend chat entry
       const res = await createChat([targetUser.id], false);
-      const chatId = res.chat_id || res.chat?.id;
+      const chatId = res?.id || res?.chat?.id || res?.conversation?.id || res?.chat_id;
       if (chatId) {
-        onChatCreated(chatId, targetUser);
+        const officialChat = { ...res, id: chatId };
+        onSelectChat(officialChat);
+        if (onChatCreated) onChatCreated(chatId, targetUser);
       }
     } catch (err) {
       console.error('Failed to create chat:', err);

@@ -211,12 +211,13 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
 
       // Handle temporary chat IDs by resolving/creating real DB chat UUID
       if (String(targetChatId).startsWith('temp-')) {
-        const otherParticipant = activeChat.participants?.find((p) => p.id !== user?.id);
+        const otherParticipant = activeChat.participants?.find((p) => String(p.id) !== String(user?.id));
         if (otherParticipant) {
           const res = await createChat([otherParticipant.id], false);
-          targetChatId = res.chat_id || res.chat?.id;
-          if (targetChatId) {
-            activeChat.id = targetChatId;
+          const realId = res?.id || res?.chat?.id || res?.conversation?.id || res?.chat_id;
+          if (realId) {
+            targetChatId = realId;
+            activeChat.id = realId;
           }
         }
       }
