@@ -34,17 +34,25 @@ function checkPgPort(host, port, timeoutMs = 500) {
 async function ensurePgSchema(poolInstance) {
   try {
     const schemaPath = path.join(__dirname, '../db/schema.sql');
+    const seedPath = path.join(__dirname, '../db/seed.sql');
+
     if (fs.existsSync(schemaPath)) {
       const schemaSql = fs.readFileSync(schemaPath, 'utf8');
       const statements = schemaSql.split(';').map((s) => s.trim()).filter(Boolean);
       for (const stmt of statements) {
         try {
           await poolInstance.query(stmt);
-        } catch (e) {
-          // Ignore duplicate table/index errors
-        }
+        } catch (e) {}
       }
       console.log('✅ PostgreSQL Database schema verified/initialized automatically.');
+    }
+
+    if (fs.existsSync(seedPath)) {
+      try {
+        const seedSql = fs.readFileSync(seedPath, 'utf8');
+        await poolInstance.query(seedSql);
+        console.log('✅ PostgreSQL Seed users (Alice, Bob, Charlie) initialized automatically.');
+      } catch (e) {}
     }
   } catch (err) {
     console.warn('Auto-schema verification notice:', err.message);
