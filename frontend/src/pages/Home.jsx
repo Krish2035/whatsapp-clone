@@ -9,7 +9,7 @@ import CommunitiesView from '../components/CommunitiesView';
 import SettingsView from '../components/SettingsView';
 import MediaGalleryModal from '../components/MediaGalleryModal';
 import ProfileModal from '../components/ProfileModal';
-import { fetchChats } from '../services/api';
+import { fetchChats, markAsRead as apiMarkAsRead } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { socketService } from '../services/socket';
 
@@ -56,6 +56,7 @@ export default function Home() {
         const found = safeList.find(c => String(c.id) === String(selectChatId));
         if (found) {
           setActiveChat(found);
+          apiMarkAsRead(found.id).catch(() => {});
         } else if (targetUser) {
           const newChat = {
             id: selectChatId,
@@ -69,9 +70,6 @@ export default function Home() {
           };
           setActiveChat(newChat);
         }
-      } else if (activeChat && !String(activeChat.id).startsWith('temp-')) {
-        const updatedActive = safeList.find(c => String(c.id) === String(activeChat.id));
-        if (updatedActive) setActiveChat(updatedActive);
       }
     } catch (err) {
       console.error('Error fetching chats:', err);
@@ -82,7 +80,6 @@ export default function Home() {
   const handleTabChange = (tab) => {
     setActiveTab(tab);
     if (tab === 'meta_ai') {
-      // Set or create Meta AI mock chat
       const metaAiChat = {
         id: 'meta-ai-chat-id',
         is_group: false,
@@ -99,16 +96,17 @@ export default function Home() {
 
   const handleSelectChat = (chat) => {
     setActiveChat(chat);
-    if (chat && chat.id) {
+    if (chat && chat.id && !String(chat.id).startsWith('temp-')) {
+      apiMarkAsRead(chat.id).catch(() => {});
       setChats((prev) =>
-        prev.map((c) => (String(c.id) === String(chat.id) ? { ...c, unread_count: 0 } : c))
+        prev.map((c) => (String(c.id) === String(chat.id) ? { ...c, unread_count: 0, unreadCount: 0 } : c))
       );
     }
   };
 
   const handleMessagesRead = (readChatId) => {
     setChats((prev) =>
-      prev.map((c) => (String(c.id) === String(readChatId) ? { ...c, unread_count: 0 } : c))
+      prev.map((c) => (String(c.id) === String(readChatId) ? { ...c, unread_count: 0, unreadCount: 0 } : c))
     );
   };
 
@@ -174,7 +172,7 @@ export default function Home() {
         onClose={() => setIsProfileOpen(false)} 
       />
 
-      {/* Media Gallery Overlay Modal (Screenshot 5) */}
+      {/* Media Gallery Overlay Modal */}
       <MediaGalleryModal
         isOpen={isMediaGalleryOpen}
         onClose={() => setIsMediaGalleryOpen(false)}

@@ -478,13 +478,15 @@ export default function Sidebar({ chats = [], activeChatId, onSelectChat, onChat
                 const lastMsgTime = lastMsg?.createdAt || lastMsg?.created_at;
                 const formattedTime = formatTimestamp(lastMsgTime);
 
-                const unreadCount = parseInt(chat.unread_count || 0, 10);
-                const hasUnread = unreadCount > 0;
-
                 const lastSenderId = typeof lastMsg?.sender === 'object' && lastMsg?.sender !== null
                   ? lastMsg.sender.id
                   : (lastMsg?.senderId ?? lastMsg?.sender_id ?? lastMsg?.sender);
                 const isLastMsgMine = Boolean(lastSenderId && user?.id && String(lastSenderId) === String(user?.id));
+
+                const unreadCountRaw = parseInt(chat.unread_count ?? chat.unreadCount ?? 0, 10);
+                const isUnreadStatus = Boolean(lastMsg && !isLastMsgMine && lastMsg.status !== 'read');
+                const unreadCount = unreadCountRaw > 0 ? unreadCountRaw : (isUnreadStatus ? 1 : 0);
+                const hasUnread = unreadCount > 0;
 
                 return (
                   <div
