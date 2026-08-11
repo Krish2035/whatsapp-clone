@@ -76,28 +76,14 @@ export default function Sidebar({ chats = [], activeChatId, onSelectChat, onChat
 
   const handleSelectContact = async (targetUser) => {
     try {
+      const targetIdStr = String(targetUser.id);
       // 1. Check if a chat with targetUser already exists in user's chat list
-      const existing = chats.find(c => !c.is_group && c.participants?.some(p => p.id === targetUser.id));
+      const existing = chats.find(c => !c.is_group && c.participants?.some(p => String(p.id ?? p) === targetIdStr));
       if (existing) {
         onSelectChat(existing);
         setPanelView('main');
         return;
       }
-
-      // 2. Instantly open chat area on mobile/desktop without waiting for network request
-      const tempChat = {
-        id: `temp-${targetUser.id}`,
-        is_group: false,
-        group_name: null,
-        created_at: new Date().toISOString(),
-        participants: [
-          { id: user?.id, username: user?.username, avatar_url: user?.avatar_url },
-          { id: targetUser.id, username: targetUser.username, avatar_url: targetUser.avatar_url, status_message: targetUser.status_message, is_online: targetUser.is_online }
-        ]
-      };
-      
-      onSelectChat(tempChat);
-      setPanelView('main');
 
       // Fetch or create official backend chat entry
       const res = await createChat([targetUser.id], false);
@@ -107,8 +93,9 @@ export default function Sidebar({ chats = [], activeChatId, onSelectChat, onChat
         onSelectChat(officialChat);
         if (onChatCreated) onChatCreated(chatId, targetUser);
       }
+      setPanelView('main');
     } catch (err) {
-      console.error('Failed to create chat:', err);
+      console.error('Failed to select contact:', err);
     }
   };
 
