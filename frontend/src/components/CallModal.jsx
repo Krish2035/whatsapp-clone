@@ -51,26 +51,17 @@ export default function CallModal() {
         remoteVideoRef.current.srcObject = remoteStream;
         remoteVideoRef.current.play().catch((e) => console.warn('Remote video play warning:', e));
       }
-      if (remoteAudioRef.current) {
-        remoteAudioRef.current.srcObject = remoteStream;
-        remoteAudioRef.current.volume = 1.0;
-        remoteAudioRef.current.muted = false;
-        remoteAudioRef.current.play().catch((e) => console.warn('Fallback audio play:', e.name));
-      }
     }
   }, [remoteStream, callStatus]);
 
-  // Call duration timer
+  // Call duration timer & Ringtone termination
   useEffect(() => {
     if (callStatus === 'connected') {
+      ringtoneService.stopRingtone();
       setCallDuration(0);
       timerRef.current = setInterval(() => {
         setCallDuration((prev) => prev + 1);
       }, 1000);
-
-      if (remoteAudioRef.current && remoteAudioRef.current.srcObject) {
-        remoteAudioRef.current.play().catch(() => {});
-      }
     } else {
       if (timerRef.current) clearInterval(timerRef.current);
       setCallDuration(0);

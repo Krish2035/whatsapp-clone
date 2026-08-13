@@ -11,6 +11,7 @@ class RingtoneService {
     this.isPlaying = false;
     this.timerId = null;
     this.activeOscillators = [];
+    this.activeGains = [];
   }
 
   initContext() {
@@ -59,7 +60,7 @@ class RingtoneService {
           osc1.frequency.setValueAtTime(chord.f1, currentTime);
           osc2.frequency.setValueAtTime(chord.f2, currentTime);
 
-          gain.gain.setValueAtTime(0.2, currentTime);
+          gain.gain.setValueAtTime(0.15, currentTime);
           gain.gain.exponentialRampToValueAtTime(0.001, currentTime + chord.duration + 0.12);
 
           osc1.connect(gain);
@@ -67,6 +68,7 @@ class RingtoneService {
           gain.connect(this.audioCtx.destination);
 
           this.activeOscillators.push(osc1, osc2);
+          this.activeGains.push(gain);
 
           osc1.start(currentTime);
           osc2.start(currentTime);
@@ -87,12 +89,22 @@ class RingtoneService {
     playPattern();
   }
 
-  // Instant ringtone kill-switch upon accepting/rejecting call
+  // Instant ringtone kill-switch upon accepting/rejecting/connecting call
   stopRingtone() {
     this.isPlaying = false;
     if (this.timerId) {
       clearTimeout(this.timerId);
       this.timerId = null;
+    }
+    if (this.activeGains && this.activeGains.length > 0) {
+      this.activeGains.forEach((g) => {
+        try {
+          g.gain.cancelScheduledValues(0);
+          g.gain.setValueAtTime(0, 0);
+          g.disconnect();
+        } catch (e) {}
+      });
+      this.activeGains = [];
     }
     if (this.activeOscillators && this.activeOscillators.length > 0) {
       this.activeOscillators.forEach((osc) => {
@@ -102,6 +114,11 @@ class RingtoneService {
         } catch (e) {}
       });
       this.activeOscillators = [];
+    }
+    if (this.audioCtx) {
+      try {
+        this.audioCtx.suspend().catch(() => {});
+      } catch (e) {}
     }
   }
 
