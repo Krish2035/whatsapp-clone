@@ -22,6 +22,15 @@ async function hasActiveCall(userId) {
   const parsedUserId = parseInt(userId, 10);
   if (!parsedUserId || isNaN(parsedUserId)) return null;
 
+  // Auto-clean any unclosed active calls older than 15 seconds
+  await pool.query(`
+    UPDATE calls
+    SET status = 'ended', ended_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+    WHERE (caller_id = $1 OR receiver_id = $1)
+      AND status IN ('initiated', 'calling', 'ringing', 'accepted', 'connected')
+      AND updated_at < CURRENT_TIMESTAMP - INTERVAL '15 seconds'
+  `).catch(() => {});
+
   const query = `
     SELECT * FROM calls
     WHERE (caller_id = $1 OR receiver_id = $1)
@@ -85,14 +94,10 @@ async function createCall({ callerId, receiverId, conversationId = null, callTyp
     throw new Error('Receiver user does not exist');
   }
 
-  // Verify caller does not already have an active call; auto-cleanup any un-answered calls
+  // Verify caller does not already have an active call; auto-cleanup any existing calls for caller
   const callerActiveCall = await hasActiveCall(parsedCaller);
   if (callerActiveCall) {
-    if (['initiated', 'calling', 'ringing'].includes(callerActiveCall.status)) {
-      await pool.query("UPDATE calls SET status = 'cancelled', ended_at = CURRENT_TIMESTAMP WHERE id = $1", [callerActiveCall.id]);
-    } else {
-      throw new Error('Caller is currently in another active call');
-    }
+    await pool.query("UPDATE calls SET status = 'cancelled', ended_at = CURRENT_TIMESTAMP WHERE id = $1", [callerActiveCall.id]);
   }
 
   // Verify receiver is not already in an active call

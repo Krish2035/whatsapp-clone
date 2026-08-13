@@ -44,6 +44,20 @@ async function ensurePgSchema(poolInstance) {
           await poolInstance.query(stmt);
         } catch (e) {}
       }
+
+      // Auto-migrate missing columns for existing PostgreSQL tables (e.g. Neon cloud database)
+      try {
+        await poolInstance.query('ALTER TABLE messages ADD COLUMN IF NOT EXISTS is_edited BOOLEAN DEFAULT FALSE');
+        await poolInstance.query('ALTER TABLE messages ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN DEFAULT FALSE');
+        await poolInstance.query('ALTER TABLE messages ADD COLUMN IF NOT EXISTS receiver_id INTEGER REFERENCES users(id) ON DELETE CASCADE');
+        await poolInstance.query('ALTER TABLE messages ADD COLUMN IF NOT EXISTS media_url TEXT DEFAULT NULL');
+        await poolInstance.query("ALTER TABLE messages ADD COLUMN IF NOT EXISTS media_type VARCHAR(50) DEFAULT 'text'");
+        await poolInstance.query('ALTER TABLE messages ADD COLUMN IF NOT EXISTS reply_to_id INTEGER REFERENCES messages(id) ON DELETE SET NULL');
+        await poolInstance.query('ALTER TABLE chats ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP');
+      } catch (colErr) {
+        console.warn('PostgreSQL column auto-migration warning:', colErr.message);
+      }
+
       console.log('✅ PostgreSQL Database schema verified/initialized automatically.');
     }
 
