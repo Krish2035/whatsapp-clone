@@ -32,6 +32,10 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
   const [isHeaderMenuOpen, setIsHeaderMenuOpen] = useState(false);
   const [confirmModalType, setConfirmModalType] = useState(null); // 'clear' | 'delete' | null
 
+  // Full Screen Media Preview Lightbox State
+  const [previewMedia, setPreviewMedia] = useState(null); // { url, type, name, sender, time }
+  const [zoomLevel, setZoomLevel] = useState(1);
+
   // Quoted Reply State
   const [replyingTo, setReplyingTo] = useState(null);
 
@@ -978,17 +982,63 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
                 {!isDeleted && mediaUrl && (
                   <div style={{ marginBottom: '6px' }}>
                     {mediaType === 'image' ? (
-                      <img src={mediaUrl} alt="Attachment" style={{ maxWidth: '100%', borderRadius: '6px', maxHeight: '240px', objectFit: 'cover', display: 'block' }} />
+                      <img 
+                        src={mediaUrl} 
+                        alt="Attachment" 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setPreviewMedia({
+                            url: mediaUrl,
+                            type: mediaType,
+                            name: msg.content || 'Photo',
+                            sender: msg.sender_name || msg.sender?.username || (isMe ? 'You' : getChatTitle()),
+                            time: formattedTime
+                          });
+                          setZoomLevel(1);
+                        }}
+                        style={{ maxWidth: '100%', borderRadius: '6px', maxHeight: '240px', objectFit: 'cover', display: 'block', cursor: 'pointer' }} 
+                      />
                     ) : mediaType === 'video' ? (
-                      <video controls src={mediaUrl} style={{ maxWidth: '100%', borderRadius: '6px', maxHeight: '240px', display: 'block' }} />
+                      <video 
+                        controls 
+                        src={mediaUrl} 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setPreviewMedia({
+                            url: mediaUrl,
+                            type: mediaType,
+                            name: msg.content || 'Video',
+                            sender: msg.sender_name || msg.sender?.username || (isMe ? 'You' : getChatTitle()),
+                            time: formattedTime
+                          });
+                          setZoomLevel(1);
+                        }}
+                        style={{ maxWidth: '100%', borderRadius: '6px', maxHeight: '240px', display: 'block', cursor: 'pointer' }} 
+                      />
                     ) : mediaType === 'audio' ? (
                       <audio controls src={mediaUrl} style={{ width: '220px' }} />
                     ) : (
-                      <div style={{
-                        display: 'flex', alignItems: 'center', gap: '10px',
-                        backgroundColor: 'rgba(0,0,0,0.2)', borderRadius: '8px',
-                        padding: '8px 12px', marginBottom: '4px'
-                      }}>
+                      <div 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const docName = msg.content && msg.content.startsWith('[file:') 
+                            ? msg.content.replace('[file:', '').replace(']', '') 
+                            : (mediaUrl.split('/').pop() || 'Document');
+                          setPreviewMedia({
+                            url: mediaUrl,
+                            type: mediaType,
+                            name: docName,
+                            sender: msg.sender_name || msg.sender?.username || (isMe ? 'You' : getChatTitle()),
+                            time: formattedTime
+                          });
+                          setZoomLevel(1);
+                        }}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: '10px',
+                          backgroundColor: 'rgba(0,0,0,0.2)', borderRadius: '8px',
+                          padding: '8px 12px', marginBottom: '4px', cursor: 'pointer'
+                        }}
+                      >
                         <span style={{ fontSize: '22px' }}>
                           {mediaType === 'document' ? '📄' : '📎'}
                         </span>
@@ -1266,6 +1316,154 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
               {confirmModalType === 'clear' ? 'Clear chat' : 'Delete chat'}
             </button>
           </div>
+        </div>
+      </div>
+    )}
+
+    {/* Full Screen Media Preview Modal Overlay */}
+    {previewMedia && (
+      <div 
+        onClick={() => setPreviewMedia(null)}
+        style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(11, 20, 26, 0.95)', display: 'flex',
+          flexDirection: 'column', zIndex: 2500, backdropFilter: 'blur(10px)'
+        }}
+      >
+        {/* Fullscreen Modal Header Bar */}
+        <div 
+          onClick={(e) => e.stopPropagation()}
+          style={{
+            height: '60px', backgroundColor: 'rgba(32, 44, 51, 0.8)',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            padding: '0 24px', borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+            zIndex: 10
+          }}
+        >
+          {/* Left Info: Sender & Timestamp */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div style={{ color: '#e9edef', fontWeight: '600', fontSize: '16px' }}>
+              {previewMedia.sender || 'Media Preview'}
+            </div>
+            {previewMedia.time && (
+              <span style={{ color: '#8696a0', fontSize: '13px' }}>
+                {previewMedia.time}
+              </span>
+            )}
+          </div>
+
+          {/* Right Action Controls */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+            {previewMedia.type === 'image' && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setZoomLevel((z) => Math.min(z + 0.25, 3))}
+                  style={{
+                    background: 'none', border: 'none', color: '#e9edef',
+                    fontSize: '18px', cursor: 'pointer', padding: '6px'
+                  }}
+                  title="Zoom In"
+                >
+                  🔍+
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setZoomLevel((z) => Math.max(z - 0.25, 0.5))}
+                  style={{
+                    background: 'none', border: 'none', color: '#e9edef',
+                    fontSize: '18px', cursor: 'pointer', padding: '6px'
+                  }}
+                  title="Zoom Out"
+                >
+                  🔍-
+                </button>
+              </>
+            )}
+            <button
+              type="button"
+              onClick={(e) => handleDownloadMedia(e, previewMedia.url, previewMedia.name)}
+              style={{
+                backgroundColor: '#00a884', border: 'none', color: '#111b21',
+                padding: '6px 14px', borderRadius: '6px', fontWeight: '600',
+                fontSize: '13px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px'
+              }}
+              title="Download File"
+            >
+              ⬇ Download
+            </button>
+            <button
+              type="button"
+              onClick={() => setPreviewMedia(null)}
+              style={{
+                background: 'none', border: 'none', color: '#e9edef',
+                fontSize: '24px', cursor: 'pointer', padding: '4px'
+              }}
+              title="Close (Esc)"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+
+        {/* Fullscreen Media Viewer Workspace */}
+        <div 
+          style={{
+            flex: 1, display: 'flex', alignItems: 'center',
+            justifyContent: 'center', padding: '24px', overflow: 'hidden'
+          }}
+        >
+          {previewMedia.type === 'image' ? (
+            <img
+              src={previewMedia.url}
+              alt="Full Screen Preview"
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                maxWidth: '90%', maxHeight: '90%', objectFit: 'contain',
+                borderRadius: '8px', transform: `scale(${zoomLevel})`,
+                transition: 'transform 0.2s ease-out', boxShadow: '0 12px 40px rgba(0,0,0,0.8)'
+              }}
+            />
+          ) : previewMedia.type === 'video' ? (
+            <video
+              controls
+              autoPlay
+              src={previewMedia.url}
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                maxWidth: '90%', maxHeight: '85%', borderRadius: '8px',
+                boxShadow: '0 12px 40px rgba(0,0,0,0.8)'
+              }}
+            />
+          ) : (
+            <div 
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                backgroundColor: '#202c33', padding: '32px', borderRadius: '12px',
+                textAlign: 'center', color: '#e9edef', maxWidth: '420px',
+                boxShadow: '0 12px 40px rgba(0,0,0,0.8)', border: '1px solid var(--wa-border)'
+              }}
+            >
+              <div style={{ fontSize: '54px', marginBottom: '16px' }}>📄</div>
+              <h3 style={{ margin: '0 0 8px 0', fontSize: '18px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {previewMedia.name || 'Document'}
+              </h3>
+              <p style={{ color: '#8696a0', fontSize: '14px', marginBottom: '24px' }}>
+                Click download to view this document file.
+              </p>
+              <button
+                type="button"
+                onClick={(e) => handleDownloadMedia(e, previewMedia.url, previewMedia.name)}
+                style={{
+                  backgroundColor: '#00a884', border: 'none', color: '#111b21',
+                  padding: '10px 24px', borderRadius: '20px', fontWeight: 'bold',
+                  fontSize: '14px', cursor: 'pointer'
+                }}
+              >
+                ⬇ Download Document
+              </button>
+            </div>
+          )}
         </div>
       </div>
     )}
