@@ -553,7 +553,7 @@ export default function Sidebar({ chats = [], activeChatId, onSelectChat, onChat
                             </span>
                           )}
                           {(() => {
-                            if (!lastMsg) return 'No messages yet';
+                            if (!lastMsg || (!lastMsg.id && !lastMsg.content && !lastMsg.media_url && !lastMsg.mediaUrl)) return 'No messages yet';
                             if (lastMsg.is_deleted || lastMsg.isDeleted) return '🚫 This message was deleted';
                             const hasText = lastMsg.content && !lastMsg.content.startsWith('[file:') && !lastMsg.content.startsWith('[image:') && !lastMsg.content.startsWith('[video:') && !lastMsg.content.startsWith('[audio:');
                             if (hasText) return lastMsg.content;

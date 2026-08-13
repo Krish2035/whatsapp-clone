@@ -443,6 +443,9 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
         await apiClearChat(activeChat.id);
       }
       setMessages([]);
+      if (activeChat) {
+        activeChat.last_message = null;
+      }
       if (onMessageSent) onMessageSent();
     } catch (err) {
       console.error('Failed to clear chat:', err);

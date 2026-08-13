@@ -39,10 +39,14 @@ export default function Home() {
 
     socket.on('receive_message', handleUpdate);
     socket.on('messages_read_update', handleUpdate);
+    socket.on('chat_cleared', handleUpdate);
+    socket.on('chat_deleted', handleUpdate);
 
     return () => {
       socket.off('receive_message', handleUpdate);
       socket.off('messages_read_update', handleUpdate);
+      socket.off('chat_cleared', handleUpdate);
+      socket.off('chat_deleted', handleUpdate);
     };
   }, [user]);
 

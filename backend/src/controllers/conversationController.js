@@ -44,6 +44,10 @@ const conversationController = {
       const userId = req.user.id;
       const { conversationId } = req.params;
       const result = await conversationService.clearConversation(conversationId, userId);
+      const io = req.app.get('io');
+      if (io) {
+        io.to(`chat_${conversationId}`).emit('chat_cleared', { chatId: conversationId });
+      }
       res.json(result);
     } catch (err) {
       res.status(400).json({ error: err.message });
@@ -55,6 +59,10 @@ const conversationController = {
       const userId = req.user.id;
       const { conversationId } = req.params;
       const result = await conversationService.deleteConversation(conversationId, userId);
+      const io = req.app.get('io');
+      if (io) {
+        io.to(`chat_${conversationId}`).emit('chat_deleted', { chatId: conversationId });
+      }
       res.json(result);
     } catch (err) {
       res.status(400).json({ error: err.message });
