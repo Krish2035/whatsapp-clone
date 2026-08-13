@@ -33,8 +33,13 @@ app.use(cors({
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Static uploads directory for media files
-app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+// Static uploads directory for media files with CORS headers for direct blob downloads
+app.use('/uploads', express.static(path.join(__dirname, '../uploads'), {
+  setHeaders: (res) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
+  }
+}));
 
 // Health Check Endpoint
 app.get('/api/health', async (req, res) => {

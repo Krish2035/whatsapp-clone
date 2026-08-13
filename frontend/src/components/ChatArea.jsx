@@ -469,6 +469,31 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
     }
   };
 
+  const handleDownloadMedia = async (e, url, fileName) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    if (!url) return;
+
+    try {
+      const response = await fetch(url);
+      if (!response.ok) throw new Error('Fetch failed');
+      const blob = await response.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = fileName || url.split('/').pop() || 'download';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setTimeout(() => window.URL.revokeObjectURL(blobUrl), 100);
+    } catch (err) {
+      console.warn('Direct blob download failed, opening link:', err);
+      window.open(url, '_blank');
+    }
+  };
+
   const startCall = (isVideo) => {
     if (!activeChat) return;
 
@@ -967,22 +992,19 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
                           </div>
                           <div style={{ fontSize: '11px', color: '#8696a0' }}>{mediaType === 'document' ? 'Document' : 'File'}</div>
                         </div>
-                        <a
-                          href={mediaUrl}
-                          download
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          onClick={(e) => e.stopPropagation()}
+                        <button
+                          type="button"
+                          onClick={(e) => handleDownloadMedia(e, mediaUrl, msg.content && msg.content.startsWith('[file:') ? msg.content.replace('[file:', '').replace(']', '') : (mediaUrl.split('/').pop() || 'Document'))}
                           style={{
                             backgroundColor: '#00a884', color: '#111b21',
                             border: 'none', borderRadius: '6px', padding: '5px 10px',
-                            fontSize: '12px', fontWeight: 'bold', textDecoration: 'none',
+                            fontSize: '12px', fontWeight: 'bold',
                             cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px',
                             flexShrink: 0
                           }}
                         >
                           ⬇ Download
-                        </a>
+                        </button>
                       </div>
                     )}
                   </div>
