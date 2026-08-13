@@ -85,10 +85,14 @@ async function createCall({ callerId, receiverId, conversationId = null, callTyp
     throw new Error('Receiver user does not exist');
   }
 
-  // Verify caller does not already have an active call
+  // Verify caller does not already have an active call; auto-cleanup any un-answered calls
   const callerActiveCall = await hasActiveCall(parsedCaller);
   if (callerActiveCall) {
-    throw new Error('Caller is currently in another active call');
+    if (['initiated', 'calling', 'ringing'].includes(callerActiveCall.status)) {
+      await pool.query("UPDATE calls SET status = 'cancelled', ended_at = CURRENT_TIMESTAMP WHERE id = $1", [callerActiveCall.id]);
+    } else {
+      throw new Error('Caller is currently in another active call');
+    }
   }
 
   // Verify receiver is not already in an active call
