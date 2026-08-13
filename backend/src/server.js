@@ -11,7 +11,7 @@ const server = http.createServer(app);
 // Initialize Modular Socket.IO Layer
 const io = initSockets(server);
 
-let PORT = parseInt(process.env.PORT || '5000', 10);
+let PORT = parseInt(process.env.PORT || '5001', 10);
 
 function startServer(portToTry) {
   server.listen(portToTry, '0.0.0.0', async () => {

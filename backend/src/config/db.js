@@ -1,5 +1,5 @@
 const { Pool } = require('pg');
-const Database = require('better-sqlite3');
+let Database = null;
 const fs = require('fs');
 const path = require('path');
 const net = require('net');
@@ -115,6 +115,7 @@ ensureInit();
 
 function initSqlite() {
   if (sqliteDb) return;
+  if (!Database) Database = require('better-sqlite3');
   const dbPath = path.join(__dirname, '../../whatsapp_clone.db');
   sqliteDb = new Database(dbPath);
   sqliteDb.function('NOW', () => new Date().toISOString());

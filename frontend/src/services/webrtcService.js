@@ -24,33 +24,36 @@ function getIceServersConfig() {
   const customTurnUsername = import.meta.env?.VITE_TURN_USERNAME;
   const customTurnCredential = import.meta.env?.VITE_TURN_CREDENTIAL;
 
-  const servers = [
-    { urls: customStun || 'stun:stun.l.google.com:19302' },
-    { urls: 'stun:stun1.l.google.com:19302' },
-    { urls: 'stun:stun2.l.google.com:19302' },
-  ];
+  const stunUrls = customStun
+    ? customStun.split(',').map((u) => u.trim())
+    : [
+        'stun:stun.l.google.com:19302',
+        'stun:stun1.l.google.com:19302',
+        'stun:stun2.l.google.com:19302',
+        'stun:stun3.l.google.com:19302',
+        'stun:stun4.l.google.com:19302',
+        'stun:global.stun.twilio.com:3478',
+      ];
 
-  if (customTurn) {
-    servers.push({
-      urls: customTurn.includes(',') ? customTurn.split(',').map((u) => u.trim()) : customTurn,
-      username: customTurnUsername || '',
-      credential: customTurnCredential || '',
-    });
-  } else {
-    servers.push({
-      urls: [
+  const servers = stunUrls.map((url) => ({ urls: url }));
+
+  const turnUrls = customTurn
+    ? (customTurn.includes(',') ? customTurn.split(',').map((u) => u.trim()) : [customTurn])
+    : [
         'turn:openrelay.metered.ca:80',
         'turn:openrelay.metered.ca:443',
         'turn:openrelay.metered.ca:443?transport=tcp',
-      ],
-      username: 'openrelayproject',
-      credential: 'openrelayproject',
-    });
-  }
+      ];
+
+  servers.push({
+    urls: turnUrls,
+    username: customTurnUsername || 'openrelayproject',
+    credential: customTurnCredential || 'openrelayproject',
+  });
 
   return {
     iceServers: servers,
-    iceCandidatePoolSize: 0,
+    iceCandidatePoolSize: 10,
     bundlePolicy: 'max-bundle',
     rtcpMuxPolicy: 'require',
   };
