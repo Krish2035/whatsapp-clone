@@ -922,23 +922,25 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
                       </div>
                     )}
 
-                    {isMe && !isDeleted && (
+                    {!isDeleted && (
                       <>
-                        <div
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleStartEdit(msg);
-                          }}
-                          style={{ padding: '8px 14px', fontSize: '13px', color: '#e9edef', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', borderTop: '1px solid #2a3942' }}
-                        >
-                          ✏️ Edit
-                        </div>
+                        {isMe && (
+                          <div
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleStartEdit(msg);
+                            }}
+                            style={{ padding: '8px 14px', fontSize: '13px', color: '#e9edef', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', borderTop: '1px solid #2a3942' }}
+                          >
+                            ✏️ Edit
+                          </div>
+                        )}
                         <div
                           onClick={(e) => {
                             e.stopPropagation();
                             handleDeleteMsg(msg.id);
                           }}
-                          style={{ padding: '8px 14px', fontSize: '13px', color: '#f87171', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}
+                          style={{ padding: '8px 14px', fontSize: '13px', color: '#f87171', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', borderTop: !isMe ? '1px solid #2a3942' : 'none' }}
                         >
                           🗑️ Delete
                         </div>

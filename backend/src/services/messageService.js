@@ -151,23 +151,33 @@ const messageService = {
   },
 
   /**
-   * Delete message (soft delete for everyone, only allowed by original sender)
+   * Delete message (soft delete for conversation participants)
    */
   async deleteMessage(messageId, userId) {
     const numMsgId = parseInt(messageId, 10);
     const numUserId = parseInt(userId, 10);
 
-    const result = await pool.query(
-      `UPDATE messages
-       SET content = 'This message was deleted', is_deleted = TRUE, media_url = NULL, updated_at = CURRENT_TIMESTAMP
-       WHERE id = $1 AND sender_id = $2
-       RETURNING id, chat_id as "conversationId", sender_id as "senderId", receiver_id as "receiverId", content, is_deleted as "isDeleted", updated_at as "updatedAt"`,
+    // Verify user is a participant in the message's conversation
+    const msgCheck = await pool.query(
+      `SELECT m.id, m.chat_id, m.sender_id
+       FROM messages m
+       JOIN chat_participants cp ON m.chat_id = cp.chat_id AND cp.user_id = $2
+       WHERE m.id = $1`,
       [numMsgId, numUserId]
     );
 
-    if (result.rows.length === 0) {
-      throw new Error('Message not found or you are not authorized to delete this message.');
+    if (msgCheck.rows.length === 0) {
+      throw new Error('Message not found or you are not a member of this conversation.');
     }
+
+    const result = await pool.query(
+      `UPDATE messages
+       SET content = 'This message was deleted', is_deleted = TRUE, media_url = NULL, updated_at = CURRENT_TIMESTAMP
+       WHERE id = $1
+       RETURNING id, chat_id as "conversationId", sender_id as "senderId", receiver_id as "receiverId", content, is_deleted as "isDeleted", updated_at as "updatedAt"`,
+      [numMsgId]
+    );
+
     return result.rows[0];
   },
 
