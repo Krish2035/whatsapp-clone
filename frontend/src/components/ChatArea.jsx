@@ -59,8 +59,31 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
   // Contact Info Sidebar State
   const [isContactInfoOpen, setIsContactInfoOpen] = useState(false);
 
-  const messagesEndRef = useRef(null);
-  const typingTimeoutRef = useRef(null);
+  const headerMenuRef = useRef(null);
+
+  // Close header 3-dots menu, message dropdown context menu, or reaction popover when clicking anywhere outside on screen
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      // 1. Header 3-Dots Dropdown Menu
+      if (isHeaderMenuOpen && headerMenuRef.current && !headerMenuRef.current.contains(event.target)) {
+        setIsHeaderMenuOpen(false);
+      }
+
+      // 2. Message Options Dropdown Menu / Floating Reaction Bar
+      if (activeMenuMsgId || activeReactionMsgId) {
+        const isInsideMsgMenu = event.target.closest('.wa-msg-context-menu') || event.target.closest('.wa-msg-options-btn');
+        if (!isInsideMsgMenu) {
+          setActiveMenuMsgId(null);
+          setActiveReactionMsgId(null);
+        }
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isHeaderMenuOpen, activeMenuMsgId, activeReactionMsgId]);
 
   useEffect(() => {
     if (activeChat && activeChat.id) {
@@ -701,7 +724,7 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
               🔍
             </button>
 
-            <div style={{ position: 'relative' }}>
+            <div ref={headerMenuRef} style={{ position: 'relative' }}>
               <button
                 onClick={() => setIsHeaderMenuOpen((prev) => !prev)}
                 style={{
@@ -814,6 +837,7 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
                 {/* Floating Quick Reaction Bar */}
                 {isReactionOpenThis && (
                   <div
+                    className="wa-msg-context-menu"
                     onClick={(e) => e.stopPropagation()}
                     style={{
                       position: 'absolute',
@@ -858,6 +882,7 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
 
                 {/* Top-Right Always Visible Chevron Down Arrow (v) Button */}
                 <button
+                  className="wa-msg-options-btn"
                   type="button"
                   onClick={(e) => {
                     e.stopPropagation();
@@ -892,6 +917,7 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
                 {/* Context Action Menu Dropdown Window */}
                 {isMenuOpenThis && (
                   <div
+                    className="wa-msg-context-menu"
                     onClick={(e) => e.stopPropagation()}
                     style={{
                       position: 'absolute',

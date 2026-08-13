@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { searchUsers, createChat, clearChat as apiClearChat, deleteChat as apiDeleteChat } from '../services/api';
 import ProfileModal from './ProfileModal';
@@ -13,8 +13,24 @@ export default function Sidebar({ chats = [], activeChatId, onSelectChat, onChat
   const [activeFilter, setActiveFilter] = useState('all'); // 'all' | 'unread'
   const [filterQuery, setFilterQuery] = useState('');
   
-  // 3-Dots Dropdown State
+  // 3-Dots Dropdown State & Ref
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const sidebarMenuRef = useRef(null);
+
+  // Close sidebar 3-dots menu when clicking anywhere outside on screen
+  useEffect(() => {
+    if (!isMenuOpen) return;
+    const handleClickOutside = (event) => {
+      if (sidebarMenuRef.current && !sidebarMenuRef.current.contains(event.target)) {
+        setIsMenuOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isMenuOpen]);
 
   // New Chat Panel States
   const [newChatSearch, setNewChatSearch] = useState('');
@@ -482,8 +498,9 @@ export default function Sidebar({ chats = [], activeChatId, onSelectChat, onChat
               </button>
 
               {/* ⋮ 3-Dots Menu Button (Matches Screenshot 1 & 3) */}
-              <button
-                onClick={() => setIsMenuOpen(!isMenuOpen)}
+              <div ref={sidebarMenuRef} style={{ position: 'relative' }}>
+                <button
+                  onClick={() => setIsMenuOpen(!isMenuOpen)}
                 style={{
                   background: 'none',
                   border: 'none',
@@ -541,6 +558,7 @@ export default function Sidebar({ chats = [], activeChatId, onSelectChat, onChat
                   </div>
                 </div>
               )}
+              </div>
             </div>
           </div>
 

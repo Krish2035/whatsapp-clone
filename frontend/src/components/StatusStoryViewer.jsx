@@ -23,6 +23,23 @@ export default function StatusStoryViewer({ groups, initialGroupIdx = 0, onClose
 
   const intervalRef = useRef(null);
   const progressRef = useRef(0);
+  const emojiPickerRef = useRef(null);
+
+  // Close story emoji picker when clicking anywhere outside on screen
+  useEffect(() => {
+    if (!showEmojiPicker) return;
+    const handleClickOutside = (event) => {
+      if (emojiPickerRef.current && !emojiPickerRef.current.contains(event.target)) {
+        setShowEmojiPicker(false);
+        setPaused(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showEmojiPicker]);
 
   const currentGroup = groups[groupIdx];
   const currentStatus = currentGroup?.statuses?.[statusIdx];
@@ -298,7 +315,7 @@ export default function StatusStoryViewer({ groups, initialGroupIdx = 0, onClose
 
         {/* Emoji Reaction Picker */}
         {showEmojiPicker && !isOwnStatus && (
-          <div style={{
+          <div ref={emojiPickerRef} style={{
             position: 'absolute', bottom: '80px', left: '50%', transform: 'translateX(-50%)',
             backgroundColor: '#1f2c34', borderRadius: '40px', padding: '10px 16px',
             display: 'flex', gap: '10px', zIndex: 20,

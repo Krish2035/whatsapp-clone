@@ -1,8 +1,24 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 
 export default function ChannelsView({ isMobile, onBack }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const channelsMenuRef = useRef(null);
+
+  // Close channels dropdown menu when clicking anywhere outside on screen
+  useEffect(() => {
+    if (!isDropdownOpen) return;
+    const handleClickOutside = (event) => {
+      if (channelsMenuRef.current && !channelsMenuRef.current.contains(event.target)) {
+        setIsDropdownOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isDropdownOpen]);
   const [channels, setChannels] = useState([
     {
       id: 'whatsapp-official',
@@ -163,7 +179,7 @@ export default function ChannelsView({ isMobile, onBack }) {
             )}
             <h2 style={{ color: '#e9edef', fontSize: '20px', fontWeight: '600' }}>Channels</h2>
           </div>
-          <div style={{ position: 'relative' }}>
+          <div ref={channelsMenuRef} style={{ position: 'relative' }}>
             <button 
               onClick={() => setIsDropdownOpen(!isDropdownOpen)} 
               style={{ background: 'none', border: 'none', color: '#aebac1', fontSize: '24px', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '4px' }} 
