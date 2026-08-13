@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { searchUsers, createChat } from '../services/api';
+import { searchUsers, createChat, clearChat as apiClearChat, deleteChat as apiDeleteChat } from '../services/api';
 import ProfileModal from './ProfileModal';
 import NewChatModal from './NewChatModal';
 import { formatTimestamp } from '../utils/dateUtils';
@@ -24,6 +24,136 @@ export default function Sidebar({ chats = [], activeChatId, onSelectChat, onChat
   // Modals
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isGroupModalOpen, setIsGroupModalOpen] = useState(false);
+
+  // Long-press Action Sheet & Chat Management States (Pin, Favorite, Archive, Block)
+  const storageKeyPrefix = `wa_${user?.id || 'guest'}_`;
+
+  const [pinnedIds, setPinnedIds] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem(storageKeyPrefix + 'pinned') || '[]');
+    } catch (e) { return []; }
+  });
+
+  const [favoriteIds, setFavoriteIds] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem(storageKeyPrefix + 'favorites') || '[]');
+    } catch (e) { return []; }
+  });
+
+  const [archivedIds, setArchivedIds] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem(storageKeyPrefix + 'archived') || '[]');
+    } catch (e) { return []; }
+  });
+
+  const [blockedUserIds, setBlockedUserIds] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem(storageKeyPrefix + 'blocked') || '[]');
+    } catch (e) { return []; }
+  });
+
+  const [selectedChatActionMenu, setSelectedChatActionMenu] = useState(null);
+  const pressTimerRef = React.useRef(null);
+  const isLongPressRef = React.useRef(false);
+
+  useEffect(() => {
+    if (user?.id) {
+      localStorage.setItem(storageKeyPrefix + 'pinned', JSON.stringify(pinnedIds));
+      localStorage.setItem(storageKeyPrefix + 'favorites', JSON.stringify(favoriteIds));
+      localStorage.setItem(storageKeyPrefix + 'archived', JSON.stringify(archivedIds));
+      localStorage.setItem(storageKeyPrefix + 'blocked', JSON.stringify(blockedUserIds));
+    }
+  }, [pinnedIds, favoriteIds, archivedIds, blockedUserIds, user]);
+
+  const handleTouchStart = (chat) => {
+    isLongPressRef.current = false;
+    if (pressTimerRef.current) clearTimeout(pressTimerRef.current);
+    pressTimerRef.current = setTimeout(() => {
+      isLongPressRef.current = true;
+      setSelectedChatActionMenu(chat);
+      if (typeof navigator !== 'undefined' && navigator.vibrate) {
+        try { navigator.vibrate(50); } catch (e) {}
+      }
+    }, 500);
+  };
+
+  const handleTouchEnd = () => {
+    if (pressTimerRef.current) {
+      clearTimeout(pressTimerRef.current);
+      pressTimerRef.current = null;
+    }
+  };
+
+  const handleContextMenu = (e, chat) => {
+    e.preventDefault();
+    setSelectedChatActionMenu(chat);
+  };
+
+  const handleChatClick = (chat) => {
+    if (isLongPressRef.current) {
+      isLongPressRef.current = false;
+      return;
+    }
+    onSelectChat(chat);
+  };
+
+  const handleTogglePin = (chatId) => {
+    setPinnedIds((prev) =>
+      prev.includes(chatId) ? prev.filter((id) => id !== chatId) : [...prev, chatId]
+    );
+    setSelectedChatActionMenu(null);
+  };
+
+  const handleToggleFavorite = (chatId) => {
+    setFavoriteIds((prev) =>
+      prev.includes(chatId) ? prev.filter((id) => id !== chatId) : [...prev, chatId]
+    );
+    setSelectedChatActionMenu(null);
+  };
+
+  const handleToggleArchive = (chatId) => {
+    setArchivedIds((prev) =>
+      prev.includes(chatId) ? prev.filter((id) => id !== chatId) : [...prev, chatId]
+    );
+    setSelectedChatActionMenu(null);
+  };
+
+  const handleToggleBlock = (otherUserId) => {
+    setBlockedUserIds((prev) =>
+      prev.includes(otherUserId) ? prev.filter((id) => id !== otherUserId) : [...prev, otherUserId]
+    );
+    setSelectedChatActionMenu(null);
+  };
+
+  const handleClearChatAction = async (chatId) => {
+    try {
+      if (!String(chatId).startsWith('temp-')) {
+        await apiClearChat(chatId);
+      }
+      const targetChat = safeChats.find((c) => String(c.id) === String(chatId));
+      if (targetChat) {
+        targetChat.last_message = null;
+      }
+      setSelectedChatActionMenu(null);
+      if (onChatCreated) onChatCreated(chatId);
+    } catch (err) {
+      console.error('Failed to clear chat:', err);
+      alert('Failed to clear chat: ' + (err.message || 'Error'));
+    }
+  };
+
+  const handleDeleteChatAction = async (chatId) => {
+    try {
+      if (!String(chatId).startsWith('temp-')) {
+        await apiDeleteChat(chatId);
+      }
+      setSelectedChatActionMenu(null);
+      if (onChatCreated) onChatCreated(chatId);
+    } catch (err) {
+      console.error('Failed to delete chat:', err);
+      alert('Failed to delete chat: ' + (err.message || 'Error'));
+    }
+  };
 
   useEffect(() => {
     if (panelView === 'new_chat') {
@@ -137,17 +267,23 @@ export default function Sidebar({ chats = [], activeChatId, onSelectChat, onChat
     return (other?.username || user?.username)?.[0]?.toUpperCase() || '💬';
   };
 
-  const safeChats = Array.isArray(chats) ? chats : [];
-
   const filteredChats = safeChats.filter(chat => {
     if (!chat) return false;
     const title = getChatTitle(chat);
     const matchesQuery = title.toLowerCase().includes((filterQuery || '').toLowerCase());
+    const isArchived = archivedIds.includes(chat.id);
+    if (isArchived && activeFilter !== 'archived') return false;
     if (activeFilter === 'unread') {
       const lastMsg = chat.last_message;
       return matchesQuery && (lastMsg && lastMsg.sender_id !== user?.id && lastMsg.status !== 'read');
     }
     return matchesQuery;
+  }).sort((a, b) => {
+    const aPinned = pinnedIds.includes(a.id);
+    const bPinned = pinnedIds.includes(b.id);
+    if (aPinned && !bPinned) return -1;
+    if (!aPinned && bPinned) return 1;
+    return 0;
   });
 
   return (
@@ -489,10 +625,17 @@ export default function Sidebar({ chats = [], activeChatId, onSelectChat, onChat
                 const unreadCount = isActive ? 0 : (unreadCountRaw > 0 ? unreadCountRaw : (isUnreadStatus ? 1 : 0));
                 const hasUnread = !isActive && unreadCount > 0;
 
+                const isPinned = pinnedIds.includes(chat.id);
+                const isFavorite = favoriteIds.includes(chat.id);
+
                 return (
                   <div
                     key={chat.id}
-                    onClick={() => onSelectChat(chat)}
+                    onClick={() => handleChatClick(chat)}
+                    onTouchStart={() => handleTouchStart(chat)}
+                    onTouchEnd={handleTouchEnd}
+                    onTouchMove={handleTouchEnd}
+                    onContextMenu={(e) => handleContextMenu(e, chat)}
                     style={{
                       display: 'flex',
                       alignItems: 'center',
@@ -501,7 +644,9 @@ export default function Sidebar({ chats = [], activeChatId, onSelectChat, onChat
                       backgroundColor: isActive ? '#2a3942' : 'transparent',
                       cursor: 'pointer',
                       borderBottom: '1px solid #222d34',
-                      transition: 'background 0.15s'
+                      transition: 'background 0.15s',
+                      userSelect: 'none',
+                      WebkitUserSelect: 'none'
                     }}
                   >
                     <div style={{
@@ -535,8 +680,10 @@ export default function Sidebar({ chats = [], activeChatId, onSelectChat, onChat
                     <div style={{ flex: 1, overflow: 'hidden' }}>
                       {/* Top line: Name & Timestamp */}
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                        <span style={{ color: '#e9edef', fontWeight: '600', fontSize: '15px' }}>
+                        <span style={{ color: '#e9edef', fontWeight: '600', fontSize: '15px', display: 'flex', alignItems: 'center', gap: '6px' }}>
                           {title}
+                          {isFavorite && <span style={{ fontSize: '12px', color: '#f59e0b' }} title="Favorite">⭐</span>}
+                          {isPinned && <span style={{ fontSize: '12px', color: '#00a884' }} title="Pinned">📌</span>}
                         </span>
                         {formattedTime && (
                           <span style={{ 
@@ -605,6 +752,107 @@ export default function Sidebar({ chats = [], activeChatId, onSelectChat, onChat
                 );
               })
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Long-Press Chat Context Action Sheet Modal */}
+      {selectedChatActionMenu && (
+        <div 
+          onClick={() => setSelectedChatActionMenu(null)}
+          style={{
+            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+            backgroundColor: 'rgba(11, 20, 26, 0.75)', zIndex: 3000,
+            display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
+            backdropFilter: 'blur(4px)'
+          }}
+        >
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: '100%', maxWidth: '440px', backgroundColor: '#1f2c34',
+              borderTopLeftRadius: '16px', borderTopRightRadius: '16px',
+              padding: '16px 0 24px 0', border: '1px solid #2a3942',
+              boxShadow: '0 -8px 32px rgba(0,0,0,0.6)'
+            }}
+          >
+            {/* Action Bar Header */}
+            <div style={{ padding: '8px 24px 16px 24px', borderBottom: '1px solid #2a3942', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ color: '#e9edef', fontWeight: 'bold', fontSize: '16px' }}>
+                {getChatTitle(selectedChatActionMenu)}
+              </span>
+              <button 
+                type="button"
+                onClick={() => setSelectedChatActionMenu(null)}
+                style={{ background: 'none', border: 'none', color: '#8696a0', fontSize: '18px', cursor: 'pointer' }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Menu Options */}
+            <div style={{ padding: '8px 0' }}>
+              {/* Pin Chat */}
+              <div 
+                onClick={() => handleTogglePin(selectedChatActionMenu.id)}
+                style={{ padding: '12px 24px', color: '#e9edef', fontSize: '15px', display: 'flex', alignItems: 'center', gap: '16px', cursor: 'pointer' }}
+              >
+                <span style={{ fontSize: '18px' }}>{pinnedIds.includes(selectedChatActionMenu.id) ? '📍' : '📌'}</span>
+                <span>{pinnedIds.includes(selectedChatActionMenu.id) ? 'Unpin chat' : 'Pin chat'}</span>
+              </div>
+
+              {/* Favorite Chat */}
+              <div 
+                onClick={() => handleToggleFavorite(selectedChatActionMenu.id)}
+                style={{ padding: '12px 24px', color: '#e9edef', fontSize: '15px', display: 'flex', alignItems: 'center', gap: '16px', cursor: 'pointer' }}
+              >
+                <span style={{ fontSize: '18px' }}>{favoriteIds.includes(selectedChatActionMenu.id) ? '🌟' : '⭐'}</span>
+                <span>{favoriteIds.includes(selectedChatActionMenu.id) ? 'Remove from favorites' : 'Add to favorites'}</span>
+              </div>
+
+              {/* Archive Chat */}
+              <div 
+                onClick={() => handleToggleArchive(selectedChatActionMenu.id)}
+                style={{ padding: '12px 24px', color: '#e9edef', fontSize: '15px', display: 'flex', alignItems: 'center', gap: '16px', cursor: 'pointer' }}
+              >
+                <span style={{ fontSize: '18px' }}>{archivedIds.includes(selectedChatActionMenu.id) ? '📤' : '📥'}</span>
+                <span>{archivedIds.includes(selectedChatActionMenu.id) ? 'Unarchive chat' : 'Archive chat'}</span>
+              </div>
+
+              {/* Clear Chat */}
+              <div 
+                onClick={() => handleClearChatAction(selectedChatActionMenu.id)}
+                style={{ padding: '12px 24px', color: '#e9edef', fontSize: '15px', display: 'flex', alignItems: 'center', gap: '16px', cursor: 'pointer' }}
+              >
+                <span style={{ fontSize: '18px' }}>🧹</span>
+                <span>Clear chat</span>
+              </div>
+
+              {/* Delete Chat */}
+              <div 
+                onClick={() => handleDeleteChatAction(selectedChatActionMenu.id)}
+                style={{ padding: '12px 24px', color: '#f87171', fontSize: '15px', display: 'flex', alignItems: 'center', gap: '16px', cursor: 'pointer' }}
+              >
+                <span style={{ fontSize: '18px' }}>🗑️</span>
+                <span>Delete chat</span>
+              </div>
+
+              {/* Block Contact */}
+              {(() => {
+                const other = getOtherParticipant(selectedChatActionMenu);
+                if (!other || String(other.id) === String(user?.id)) return null;
+                const isBlocked = blockedUserIds.includes(other.id);
+                return (
+                  <div 
+                    onClick={() => handleToggleBlock(other.id)}
+                    style={{ padding: '12px 24px', color: isBlocked ? '#4ade80' : '#f87171', fontSize: '15px', display: 'flex', alignItems: 'center', gap: '16px', cursor: 'pointer' }}
+                  >
+                    <span style={{ fontSize: '18px' }}>🚫</span>
+                    <span>{isBlocked ? `Unblock ${other.username}` : `Block ${other.username}`}</span>
+                  </div>
+                );
+              })()}
+            </div>
           </div>
         </div>
       )}
