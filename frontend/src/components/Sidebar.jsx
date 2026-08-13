@@ -41,6 +41,8 @@ export default function Sidebar({ chats = [], activeChatId, onSelectChat, onChat
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isGroupModalOpen, setIsGroupModalOpen] = useState(false);
 
+  const safeChats = Array.isArray(chats) ? chats : [];
+
   // Long-press Action Sheet & Chat Management States (Pin, Favorite, Archive, Block)
   const storageKeyPrefix = `wa_${user?.id || 'guest'}_`;
 
