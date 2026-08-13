@@ -273,46 +273,54 @@ export default function ChannelsView({ isMobile, onBack }) {
               No channels followed yet.<br />Click <strong>+</strong> above to create or discover channels!
             </div>
           ) : (
-            filteredChannels.map(item => (
-              <div 
-                key={item.id}
-                onClick={() => setActiveChannel(item)}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: '12px',
-                  padding: '12px 16px', cursor: 'pointer',
-                  borderBottom: '1px solid rgba(34, 45, 52, 0.4)',
-                  backgroundColor: activeChannel?.id === item.id ? '#2a3942' : 'transparent'
-                }}
-              >
-                <div style={{
-                  width: '46px', height: '46px', borderRadius: '50%',
-                  backgroundColor: item.color || '#202c33', display: 'flex', alignItems: 'center',
-                  justifyContent: 'center', fontSize: '22px', flexShrink: 0
-                }}>
-                  {item.avatar}
-                </div>
-                <div style={{ flex: 1, overflow: 'hidden' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                    <span style={{ color: '#e9edef', fontWeight: '600', fontSize: '15px' }}>{item.name}</span>
-                    <span style={{ color: '#667781', fontSize: '11px' }}>{item.time}</span>
+            filteredChannels.map(item => {
+              const isActive = activeChannel?.id === item.id;
+              const hasUnread = !isActive && item.unread > 0;
+
+              return (
+                <div 
+                  key={item.id}
+                  onClick={() => {
+                    setActiveChannel(item);
+                    setChannels(prev => prev.map(c => c.id === item.id ? { ...c, unread: 0 } : c));
+                  }}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: '12px',
+                    padding: '12px 16px', cursor: 'pointer',
+                    borderBottom: '1px solid rgba(34, 45, 52, 0.4)',
+                    backgroundColor: isActive ? '#2a3942' : 'transparent'
+                  }}
+                >
+                  <div style={{
+                    width: '46px', height: '46px', borderRadius: '50%',
+                    backgroundColor: item.color || '#202c33', display: 'flex', alignItems: 'center',
+                    justifyContent: 'center', fontSize: '22px', flexShrink: 0
+                  }}>
+                    {item.avatar}
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '2px' }}>
-                    <span style={{ color: '#8696a0', fontSize: '13px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      {item.snippet}
-                    </span>
-                    {item.unread > 0 && (
-                      <span style={{
-                        backgroundColor: '#00a884', color: '#111b21',
-                        borderRadius: '10px', fontSize: '11px', fontWeight: 'bold',
-                        padding: '2px 6px', flexShrink: 0, marginLeft: '6px'
-                      }}>
-                        {item.unread}
+                  <div style={{ flex: 1, overflow: 'hidden' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                      <span style={{ color: '#e9edef', fontWeight: '600', fontSize: '15px' }}>{item.name}</span>
+                      <span style={{ color: hasUnread ? '#00a884' : '#667781', fontSize: '11px', fontWeight: hasUnread ? 'bold' : 'normal' }}>{item.time}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '2px' }}>
+                      <span style={{ color: hasUnread ? '#e9edef' : '#8696a0', fontSize: '13px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {item.snippet}
                       </span>
-                    )}
+                      {hasUnread && (
+                        <span style={{
+                          backgroundColor: '#00a884', color: '#111b21',
+                          borderRadius: '10px', fontSize: '11px', fontWeight: 'bold',
+                          padding: '2px 6px', flexShrink: 0, marginLeft: '6px'
+                        }}>
+                          {item.unread}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
         </>
