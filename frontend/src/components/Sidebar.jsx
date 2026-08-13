@@ -552,7 +552,26 @@ export default function Sidebar({ chats = [], activeChatId, onSelectChat, onChat
                               {lastMsg?.status === 'read' ? '✓✓' : lastMsg?.status === 'delivered' ? '✓✓' : '✓'}
                             </span>
                           )}
-                          {lastMsg?.content || (lastMsg?.mediaUrl || lastMsg?.media_url ? '📎 Attachment' : 'No messages yet')}
+                          {(() => {
+                            if (!lastMsg) return 'No messages yet';
+                            if (lastMsg.is_deleted || lastMsg.isDeleted) return '🚫 Message deleted';
+                            const mUrl = lastMsg.media_url || lastMsg.mediaUrl;
+                            const mType = lastMsg.media_type || lastMsg.type;
+                            const rawContent = lastMsg.content || '';
+                            if (mUrl || rawContent.startsWith('[file:')) {
+                              if (mType === 'image' || (mUrl && mUrl.match(/\.(jpg|jpeg|png|gif|webp)$/i)) || rawContent.match(/\.(jpg|jpeg|png|gif|webp)\]?$/i)) {
+                                return '📷 Photo';
+                              }
+                              if (mType === 'video' || (mUrl && mUrl.match(/\.(mp4|mov|avi|mkv)$/i)) || rawContent.match(/\.(mp4|mov|avi|mkv)\]?$/i)) {
+                                return '🎥 Video';
+                              }
+                              if (mType === 'audio' || (mUrl && mUrl.match(/\.(mp3|wav|ogg|m4a)$/i))) {
+                                return '🎵 Audio';
+                              }
+                              return '📄 Document';
+                            }
+                            return rawContent || 'No messages yet';
+                          })()}
                         </div>
 
                         {hasUnread && (

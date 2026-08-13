@@ -211,7 +211,7 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
     if (e) e.preventDefault();
     if ((!inputText.trim() && !mediaUrl) || !activeChat) return;
 
-    const content = inputText.trim() || (originalName ? `[file:${originalName}]` : '');
+    const content = inputText.trim();
     const replyTarget = replyingTo;
     setInputText('');
     setReplyingTo(null);
@@ -680,6 +680,20 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
 
             const replyObj = msg.reply_to || msg.replyTo;
 
+            const hasTextCaption = Boolean(
+              !isDeleted &&
+              msg.content &&
+              !msg.content.startsWith('[file:') &&
+              msg.content.trim() !== ''
+            );
+
+            const isPureVisualMedia = Boolean(
+              !isDeleted &&
+              mediaUrl &&
+              (mediaType === 'image' || mediaType === 'video') &&
+              !hasTextCaption
+            );
+
             return (
               <div
                 key={msg.id || `msg-${idx}`}
@@ -689,13 +703,14 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
                 style={{
                   alignSelf: isMe ? 'flex-end' : 'flex-start',
                   maxWidth: '75%',
-                  minWidth: '150px',
+                  minWidth: isPureVisualMedia ? '180px' : '150px',
                   backgroundColor: isMe ? '#005c4b' : '#202c33',
                   color: 'var(--wa-text-primary)',
-                  padding: '8px 28px 6px 12px',
+                  padding: isPureVisualMedia ? '3px' : '6px 24px 6px 10px',
                   borderRadius: isMe ? '8px 0px 8px 8px' : '0px 8px 8px 8px',
                   boxShadow: '0 1px 2px rgba(0,0,0,0.2)',
-                  position: 'relative'
+                  position: 'relative',
+                  overflow: 'hidden'
                 }}
               >
                 {/* Floating Quick Reaction Bar */}
@@ -755,7 +770,7 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
                     position: 'absolute',
                     top: '4px',
                     right: '4px',
-                    backgroundColor: '#233138',
+                    backgroundColor: 'rgba(35, 49, 56, 0.85)',
                     border: '1px solid #2a3942',
                     color: '#e9edef',
                     cursor: 'pointer',
@@ -765,7 +780,7 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    zIndex: 10,
+                    zIndex: 15,
                     boxShadow: '0 2px 4px rgba(0,0,0,0.4)',
                     opacity: 1
                   }}
@@ -843,7 +858,7 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
 
                 {/* Group Sender Badge */}
                 {!isMe && activeChat.is_group && (
-                  <div style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--wa-accent)', marginBottom: '4px' }}>
+                  <div style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--wa-accent)', padding: isPureVisualMedia ? '4px 8px 0 8px' : '0 0 4px 0' }}>
                     {msg.sender_name || msg.sender?.username}
                   </div>
                 )}
@@ -852,7 +867,7 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
                 {replyObj && (
                   <div style={{
                     backgroundColor: 'rgba(0,0,0,0.25)', borderLeft: '3px solid var(--wa-accent)',
-                    padding: '6px 10px', borderRadius: '4px', marginBottom: '6px', fontSize: '12px'
+                    padding: '6px 10px', borderRadius: '4px', margin: isPureVisualMedia ? '4px 4px 2px 4px' : '0 0 6px 0', fontSize: '12px'
                   }}>
                     <div style={{ fontWeight: 'bold', color: 'var(--wa-accent)' }}>
                       {replyObj.sender_name || replyObj.sender?.username || 'Replied Message'}
@@ -865,27 +880,48 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
 
                 {/* Media Content */}
                 {!isDeleted && mediaUrl && (
-                  <div style={{ marginBottom: '6px' }}>
+                  <div>
                     {mediaType === 'image' ? (
-                      <img src={mediaUrl} alt="Attachment" style={{ maxWidth: '100%', borderRadius: '6px', maxHeight: '240px', objectFit: 'cover', display: 'block' }} />
+                      <img 
+                        src={mediaUrl} 
+                        alt="Attachment" 
+                        onClick={() => window.open(mediaUrl, '_blank')}
+                        style={{ 
+                          width: '100%', 
+                          borderRadius: '6px', 
+                          maxHeight: '320px', 
+                          objectFit: 'cover', 
+                          display: 'block',
+                          cursor: 'pointer'
+                        }} 
+                      />
                     ) : mediaType === 'video' ? (
-                      <video controls src={mediaUrl} style={{ maxWidth: '100%', borderRadius: '6px', maxHeight: '240px', display: 'block' }} />
+                      <video 
+                        controls 
+                        src={mediaUrl} 
+                        style={{ 
+                          width: '100%', 
+                          borderRadius: '6px', 
+                          maxHeight: '320px', 
+                          display: 'block' 
+                        }} 
+                      />
                     ) : mediaType === 'audio' ? (
-                      <audio controls src={mediaUrl} style={{ width: '220px' }} />
+                      <audio controls src={mediaUrl} style={{ width: '220px', margin: '4px 0' }} />
                     ) : (
                       <div style={{
                         display: 'flex', alignItems: 'center', gap: '10px',
-                        backgroundColor: 'rgba(0,0,0,0.2)', borderRadius: '8px',
-                        padding: '8px 12px', marginBottom: '4px'
+                        backgroundColor: 'rgba(0,0,0,0.25)', borderRadius: '8px',
+                        padding: '10px 12px', margin: '4px 0'
                       }}>
-                        <span style={{ fontSize: '22px' }}>
+                        <span style={{ fontSize: '24px' }}>
                           {mediaType === 'document' ? '📄' : '📎'}
                         </span>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontSize: '13px', color: '#e9edef', fontWeight: '500', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                             {msg.content && msg.content.startsWith('[file:') 
                               ? msg.content.replace('[file:', '').replace(']', '') 
-                              : (mediaUrl.split('/').pop() || 'File')}
+                              : (mediaUrl.split('/').pop() || 'Document')}
                           </div>
                           <div style={{ fontSize: '11px', color: '#8696a0' }}>{mediaType === 'document' ? 'Document' : 'File'}</div>
                         </div>
@@ -958,21 +994,48 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
                       </button>
                     </div>
                   </div>
-                ) : (
+                ) : hasTextCaption ? (
+                  <div style={{ fontStyle: isDeleted ? 'italic' : 'normal', color: isDeleted ? '#8696a0' : 'inherit', padding: isPureVisualMedia ? '0 8px 4px 8px' : '4px 0 0 0' }}>
+                    {isDeleted ? '🚫 This message was deleted' : renderStructuredMessage(msg.content)}
+                  </div>
+                ) : !mediaUrl ? (
                   <div style={{ fontStyle: isDeleted ? 'italic' : 'normal', color: isDeleted ? '#8696a0' : 'inherit', paddingRight: '12px' }}>
                     {isDeleted ? '🚫 This message was deleted' : renderStructuredMessage(msg.content)}
                   </div>
-                )}
+                ) : null}
 
-                {/* Timestamp, Edited Badge & Ticks */}
-                <div style={{
-                  display: 'flex', justifyContent: 'flex-end', alignItems: 'center',
-                  marginTop: '4px', gap: '4px', fontSize: '10px', color: '#8696a0'
-                }}>
-                  {isEdited && !isDeleted && <span style={{ fontStyle: 'italic', marginRight: '2px' }}>(edited)</span>}
-                  <span>{formattedTime}</span>
-                  {isMe && renderTick(msg.status)}
-                </div>
+                {/* Timestamp, Edited Badge & Ticks (Overlay badge for pure visual media, standard inline for text/docs) */}
+                {isPureVisualMedia ? (
+                  <div style={{
+                    position: 'absolute',
+                    bottom: '8px',
+                    right: '8px',
+                    backgroundColor: 'rgba(11, 20, 26, 0.65)',
+                    backdropFilter: 'blur(4px)',
+                    borderRadius: '10px',
+                    padding: '2px 8px',
+                    fontSize: '10px',
+                    color: '#e9edef',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.4)',
+                    zIndex: 5
+                  }}>
+                    {isEdited && !isDeleted && <span style={{ fontStyle: 'italic' }}>(edited)</span>}
+                    <span>{formattedTime}</span>
+                    {isMe && renderTick(msg.status)}
+                  </div>
+                ) : (
+                  <div style={{
+                    display: 'flex', justifyContent: 'flex-end', alignItems: 'center',
+                    marginTop: '4px', gap: '4px', fontSize: '10px', color: '#8696a0'
+                  }}>
+                    {isEdited && !isDeleted && <span style={{ fontStyle: 'italic', marginRight: '2px' }}>(edited)</span>}
+                    <span>{formattedTime}</span>
+                    {isMe && renderTick(msg.status)}
+                  </div>
+                )}
 
                 {/* Emoji Reaction Badges (Positioned at bottom-left corner of message bubble) */}
                 {msg.reactions && msg.reactions.length > 0 && (
