@@ -99,7 +99,12 @@ export default function Home() {
     if (chat && chat.id && !String(chat.id).startsWith('temp-')) {
       apiMarkAsRead(chat.id).catch(() => {});
       setChats((prev) =>
-        prev.map((c) => (String(c.id) === String(chat.id) ? { ...c, unread_count: 0, unreadCount: 0 } : c))
+        prev.map((c) => (String(c.id) === String(chat.id) ? { 
+          ...c, 
+          unread_count: 0, 
+          unreadCount: 0,
+          last_message: c.last_message ? { ...c.last_message, status: 'read' } : c.last_message 
+        } : c))
       );
     }
   };

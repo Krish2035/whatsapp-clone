@@ -457,7 +457,7 @@ export default function Sidebar({ chats = [], activeChatId, onSelectChat, onChat
               </div>
             ) : (
               filteredChats.map((chat) => {
-                const isActive = chat.id === activeChatId;
+                const isActive = Boolean(activeChatId && String(chat.id) === String(activeChatId));
                 const title = getChatTitle(chat);
                 const avatar = getChatAvatar(chat);
                 const lastMsg = chat.last_message;
@@ -472,8 +472,8 @@ export default function Sidebar({ chats = [], activeChatId, onSelectChat, onChat
 
                 const unreadCountRaw = parseInt(chat.unread_count ?? chat.unreadCount ?? 0, 10);
                 const isUnreadStatus = Boolean(lastMsg && !isLastMsgMine && lastMsg.status !== 'read');
-                const unreadCount = unreadCountRaw > 0 ? unreadCountRaw : (isUnreadStatus ? 1 : 0);
-                const hasUnread = unreadCount > 0;
+                const unreadCount = isActive ? 0 : (unreadCountRaw > 0 ? unreadCountRaw : (isUnreadStatus ? 1 : 0));
+                const hasUnread = !isActive && unreadCount > 0;
 
                 return (
                   <div
