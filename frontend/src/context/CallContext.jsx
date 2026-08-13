@@ -422,26 +422,27 @@ export function CallProvider({ children }) {
           setCallStatus('connected');
         },
         (candidate) => {
-          if (candidate && socket) {
-            socket.sendWebRtcIceCandidate({ callId: activeCallIdRef.current, targetUserId, candidate });
+          if (candidate) {
+            socketService.sendWebRtcIceCandidate({ callId: activeCallIdRef.current, targetUserId, candidate });
           }
         }
       );
 
       const offer = await webrtcService.createOffer();
 
-      if (socket) {
-        console.log(`CallContext: Emitting CALL_INITIATE signal with SDP offer to ${targetUserId}`);
-        socket.initiateCall({
-          receiverId: targetUserId,
-          callType: isVideo ? 'video' : 'voice',
-          conversationId: recipient.id && !String(recipient.id).startsWith('temp-') ? recipient.id : null,
-          channelName: roomId,
-          signalData: offer,
-        });
-      }
+      console.log(`CallContext: Emitting CALL_INITIATE signal with SDP offer to ${targetUserId}`);
+      socketService.initiateCall({
+        receiverId: targetUserId,
+        callType: isVideo ? 'video' : 'voice',
+        conversationId: recipient.id && !String(recipient.id).startsWith('temp-') ? recipient.id : null,
+        channelName: roomId,
+        signalData: offer,
+      });
     } catch (err) {
       console.warn('Initiate call error:', err);
+      if (activeCallIdRef.current) {
+        apiUpdateCallStatus(activeCallIdRef.current, 'failed', 0).catch(() => {});
+      }
       cleanupCall();
     }
   };
@@ -451,7 +452,7 @@ export function CallProvider({ children }) {
     const activeUser = getUser();
     if (!activeUser || !activePeerIdRef.current) return;
 
-    const socket = socketService.connect(activeUser.id);
+    socketService.connect(activeUser.id);
 
     ringtoneService.stopRingtone();
     unlockAudioContext();
@@ -487,8 +488,8 @@ export function CallProvider({ children }) {
           setCallStatus('connected');
         },
         (candidate) => {
-          if (candidate && socket && activePeerIdRef.current) {
-            socket.sendWebRtcIceCandidate({ callId: activeCallIdRef.current, targetUserId: activePeerIdRef.current, candidate });
+          if (candidate && activePeerIdRef.current) {
+            socketService.sendWebRtcIceCandidate({ callId: activeCallIdRef.current, targetUserId: activePeerIdRef.current, candidate });
           }
         }
       );
@@ -498,8 +499,8 @@ export function CallProvider({ children }) {
         console.log('CallContext: Creating WebRTC answer for offer');
         const answer = await webrtcService.handleOfferAndCreateAnswer(offerToUse);
 
-        if (socket && activePeerIdRef.current) {
-          socket.acceptCall({ callId: activeCallIdRef.current, callerId: activePeerIdRef.current, signal: answer });
+        if (activePeerIdRef.current) {
+          socketService.acceptCall({ callId: activeCallIdRef.current, callerId: activePeerIdRef.current, signal: answer });
         }
       }
     } catch (err) {
@@ -510,7 +511,6 @@ export function CallProvider({ children }) {
   // Decline / Reject Incoming Call
   const rejectCall = async () => {
     ringtoneService.stopRingtone();
-    const socket = socketService.getSocket();
 
     if (activeCallIdRef.current) {
       try {
@@ -518,8 +518,8 @@ export function CallProvider({ children }) {
       } catch (e) {}
     }
 
-    if (socket && activePeerIdRef.current) {
-      socket.rejectCall({ callId: activeCallIdRef.current, callerId: activePeerIdRef.current });
+    if (activePeerIdRef.current) {
+      socketService.rejectCall({ callId: activeCallIdRef.current, callerId: activePeerIdRef.current });
     }
 
     cleanupCall();
@@ -529,7 +529,6 @@ export function CallProvider({ children }) {
   // End Ongoing Call
   const endCall = async () => {
     ringtoneService.stopRingtone();
-    const socket = socketService.getSocket();
     const finalDuration = callDuration;
 
     if (activeCallIdRef.current) {
@@ -538,8 +537,8 @@ export function CallProvider({ children }) {
       } catch (e) {}
     }
 
-    if (socket && activePeerIdRef.current) {
-      socket.endCall({ callId: activeCallIdRef.current, targetUserId: activePeerIdRef.current, durationSeconds: finalDuration });
+    if (activePeerIdRef.current) {
+      socketService.endCall({ callId: activeCallIdRef.current, targetUserId: activePeerIdRef.current, durationSeconds: finalDuration });
     }
 
     cleanupCall();
@@ -561,28 +560,31 @@ export function CallProvider({ children }) {
 
   // Toggle Camera (Independent Control)
   const toggleCamera = () => {
-    const nextCam = !isCamOff;
-    setIsCamOff(nextCam);
+    const nextCamOff = !isCamOff;
+    setIsCamOff(nextCamOff);
     if (localStream) {
-      localStream.getVideoTracks().forEach((t) => (t.enabled = !nextCam));
+      localStream.getVideoTracks().forEach((t) => (t.enabled = !nextCamOff));
     }
     const socket = socketService.getSocket();
     if (socket && activePeerIdRef.current) {
-      socket.emit('call_media_toggle', { to: activePeerIdRef.current, isMuted, isCamOff: nextCam });
+      socket.emit('call_media_toggle', { to: activePeerIdRef.current, isMuted, isCamOff: nextCamOff });
     }
   };
 
   // Switch Camera Device
-  const switchCameraDevice = async (targetDeviceId) => {
-    const success = await webrtcService.switchCamera(targetDeviceId);
-    if (success) {
-      setActiveCameraId(targetDeviceId);
+  const switchCameraDevice = async (deviceId) => {
+    setActiveCameraId(deviceId);
+    const ok = await webrtcService.switchCamera(deviceId);
+    if (ok && webrtcService.localStream) {
       setLocalStream(new MediaStream(webrtcService.localStream.getTracks()));
     }
   };
 
   // Cleanup helper
   const cleanupCall = () => {
+    if (activeCallIdRef.current && (callStatusRef.current === 'calling' || callStatusRef.current === 'incoming')) {
+      apiUpdateCallStatus(activeCallIdRef.current, 'cancelled', 0).catch(() => {});
+    }
     ringtoneService.stopRingtone();
     ringtoneService.cleanupRemoteAudio();
     webrtcService.cleanup();
