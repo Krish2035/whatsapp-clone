@@ -143,12 +143,15 @@ export async function uploadMedia(file) {
   const formData = new FormData();
   formData.append('file', file);
 
-  // For multipart upload, don't add Content-Type header — browser sets it automatically
   const token = localStorage.getItem('token') || sessionStorage.getItem('token');
   const headers = {};
   if (token) headers['Authorization'] = `Bearer ${token}`;
 
-  const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:5001/api';
+  let baseUrl = import.meta.env.VITE_API_URL || '/api';
+  if (baseUrl.startsWith('http') && !baseUrl.endsWith('/api')) {
+    baseUrl = baseUrl.replace(/\/+$/, '') + '/api';
+  }
+
   const res = await fetch(`${baseUrl}/upload`, {
     method: 'POST',
     headers,
