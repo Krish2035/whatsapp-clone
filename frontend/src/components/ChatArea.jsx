@@ -480,7 +480,18 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
 
   const renderStructuredMessage = (content) => {
     if (!content) return null;
-    const lines = content.split('\n');
+    let cleanContent = String(content).trim();
+    if (cleanContent.startsWith('[file:')) {
+      const fileName = cleanContent.replace('[file:', '').replace(/\]$/, '');
+      return (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: '#e9edef', padding: '2px 0' }}>
+          <span>📎</span>
+          <span style={{ fontWeight: '500' }}>{fileName}</span>
+        </div>
+      );
+    }
+
+    const lines = cleanContent.split('\n');
     return (
       <div style={{ fontSize: '14px', wordBreak: 'break-word', lineHeight: '1.5', whiteSpace: 'pre-wrap' }}>
         {lines.map((line, idx) => {
