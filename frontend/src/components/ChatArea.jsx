@@ -59,6 +59,8 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
   // Contact Info Sidebar State
   const [isContactInfoOpen, setIsContactInfoOpen] = useState(false);
 
+  const messagesEndRef = useRef(null);
+  const typingTimeoutRef = useRef(null);
   const headerMenuRef = useRef(null);
 
   // Close header 3-dots menu, message dropdown context menu, or reaction popover when clicking anywhere outside on screen
