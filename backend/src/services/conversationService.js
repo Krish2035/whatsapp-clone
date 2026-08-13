@@ -153,6 +153,28 @@ const conversationService = {
       [chatId, senderId]
     );
     return result.rows.map(row => row.user_id);
+  },
+
+  /**
+   * Clear all messages in a conversation.
+   */
+  async clearConversation(chatId, userId) {
+    const numChatId = parseInt(chatId, 10);
+    await this.getConversationById(numChatId, userId);
+    await pool.query('DELETE FROM messages WHERE chat_id = $1', [numChatId]);
+    return { success: true, chatId: numChatId };
+  },
+
+  /**
+   * Delete entire conversation and remove participants.
+   */
+  async deleteConversation(chatId, userId) {
+    const numChatId = parseInt(chatId, 10);
+    await this.getConversationById(numChatId, userId);
+    await pool.query('DELETE FROM messages WHERE chat_id = $1', [numChatId]);
+    await pool.query('DELETE FROM chat_participants WHERE chat_id = $1', [numChatId]);
+    await pool.query('DELETE FROM chats WHERE id = $1', [numChatId]);
+    return { success: true, chatId: numChatId };
   }
 };
 

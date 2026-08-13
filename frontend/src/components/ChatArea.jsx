@@ -10,7 +10,9 @@ import {
   markAsRead as apiMarkAsRead, 
   uploadMedia, 
   askMetaAi, 
-  createChat 
+  createChat,
+  clearChat as apiClearChat,
+  deleteChat as apiDeleteChat
 } from '../services/api';
 import { socketService } from '../services/socket';
 import ContactInfoSidebar from './ContactInfoSidebar';
@@ -25,6 +27,10 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
   const [inputText, setInputText] = useState('');
   const [loading, setLoading] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
+
+  // Header 3-Dots Menu & Confirmation Modal State
+  const [isHeaderMenuOpen, setIsHeaderMenuOpen] = useState(false);
+  const [confirmModalType, setConfirmModalType] = useState(null); // 'clear' | 'delete' | null
 
   // Quoted Reply State
   const [replyingTo, setReplyingTo] = useState(null);
@@ -211,7 +217,7 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
     if (e) e.preventDefault();
     if ((!inputText.trim() && !mediaUrl) || !activeChat) return;
 
-    const content = inputText.trim();
+    const content = inputText.trim() || (originalName ? `[file:${originalName}]` : '');
     const replyTarget = replyingTo;
     setInputText('');
     setReplyingTo(null);
@@ -426,6 +432,42 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
     }
   };
 
+  const handleClearChat = async () => {
+    if (!activeChat || !activeChat.id) return;
+    setConfirmModalType(null);
+    setIsHeaderMenuOpen(false);
+    setIsContactInfoOpen(false);
+
+    try {
+      if (!String(activeChat.id).startsWith('temp-')) {
+        await apiClearChat(activeChat.id);
+      }
+      setMessages([]);
+      if (onMessageSent) onMessageSent();
+    } catch (err) {
+      console.error('Failed to clear chat:', err);
+      alert('Failed to clear chat: ' + (err.message || 'Unknown error'));
+    }
+  };
+
+  const handleDeleteChat = async () => {
+    if (!activeChat || !activeChat.id) return;
+    setConfirmModalType(null);
+    setIsHeaderMenuOpen(false);
+    setIsContactInfoOpen(false);
+
+    try {
+      if (!String(activeChat.id).startsWith('temp-')) {
+        await apiDeleteChat(activeChat.id);
+      }
+      setMessages([]);
+      if (onMessageSent) onMessageSent();
+      if (onBack) onBack();
+    } catch (err) {
+      console.error('Failed to delete chat:', err);
+      alert('Failed to delete chat: ' + (err.message || 'Unknown error'));
+    }
+  };
 
   const startCall = (isVideo) => {
     if (!activeChat) return;
@@ -480,18 +522,7 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
 
   const renderStructuredMessage = (content) => {
     if (!content) return null;
-    let cleanContent = String(content).trim();
-    if (cleanContent.startsWith('[file:')) {
-      const fileName = cleanContent.replace('[file:', '').replace(/\]$/, '');
-      return (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: '#e9edef', padding: '2px 0' }}>
-          <span>📎</span>
-          <span style={{ fontWeight: '500' }}>{fileName}</span>
-        </div>
-      );
-    }
-
-    const lines = cleanContent.split('\n');
+    const lines = content.split('\n');
     return (
       <div style={{ fontSize: '14px', wordBreak: 'break-word', lineHeight: '1.5', whiteSpace: 'pre-wrap' }}>
         {lines.map((line, idx) => {
@@ -635,16 +666,52 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
               🔍
             </button>
 
-            <button
-              onClick={() => setIsContactInfoOpen((prev) => !prev)}
-              style={{
-                background: 'none', border: 'none', color: 'var(--wa-text-primary)',
-                fontSize: '20px', cursor: 'pointer', padding: '6px', borderRadius: '50%'
-              }}
-              title="Contact Info"
-            >
-              ⋮
-            </button>
+            <div style={{ position: 'relative' }}>
+              <button
+                onClick={() => setIsHeaderMenuOpen((prev) => !prev)}
+                style={{
+                  background: 'none', border: 'none', color: 'var(--wa-text-primary)',
+                  fontSize: '20px', cursor: 'pointer', padding: '6px', borderRadius: '50%'
+                }}
+                title="Menu"
+              >
+                ⋮
+              </button>
+
+              {isHeaderMenuOpen && (
+                <div style={{
+                  position: 'absolute',
+                  top: '40px',
+                  right: '0',
+                  backgroundColor: '#233138',
+                  borderRadius: '8px',
+                  padding: '8px 0',
+                  boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
+                  zIndex: 500,
+                  width: '180px',
+                  border: '1px solid var(--wa-border)'
+                }}>
+                  <div 
+                    onClick={() => { setIsContactInfoOpen(true); setIsHeaderMenuOpen(false); }}
+                    style={{ padding: '10px 16px', color: 'var(--wa-text-primary)', fontSize: '14px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px' }}
+                  >
+                    <span>ℹ️</span> Contact info
+                  </div>
+                  <div 
+                    onClick={() => { setConfirmModalType('clear'); setIsHeaderMenuOpen(false); }}
+                    style={{ padding: '10px 16px', color: 'var(--wa-text-primary)', fontSize: '14px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px' }}
+                  >
+                    <span>🧹</span> Clear chat
+                  </div>
+                  <div 
+                    onClick={() => { setConfirmModalType('delete'); setIsHeaderMenuOpen(false); }}
+                    style={{ padding: '10px 16px', color: '#ea4335', fontSize: '14px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px' }}
+                  >
+                    <span>🗑️</span> Delete chat
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
@@ -691,20 +758,6 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
 
             const replyObj = msg.reply_to || msg.replyTo;
 
-            const hasTextCaption = Boolean(
-              !isDeleted &&
-              msg.content &&
-              !msg.content.startsWith('[file:') &&
-              msg.content.trim() !== ''
-            );
-
-            const isPureVisualMedia = Boolean(
-              !isDeleted &&
-              mediaUrl &&
-              (mediaType === 'image' || mediaType === 'video') &&
-              !hasTextCaption
-            );
-
             return (
               <div
                 key={msg.id || `msg-${idx}`}
@@ -714,14 +767,13 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
                 style={{
                   alignSelf: isMe ? 'flex-end' : 'flex-start',
                   maxWidth: '75%',
-                  minWidth: isPureVisualMedia ? '180px' : '150px',
+                  minWidth: '150px',
                   backgroundColor: isMe ? '#005c4b' : '#202c33',
                   color: 'var(--wa-text-primary)',
-                  padding: isPureVisualMedia ? '3px' : '6px 24px 6px 10px',
+                  padding: '8px 28px 6px 12px',
                   borderRadius: isMe ? '8px 0px 8px 8px' : '0px 8px 8px 8px',
                   boxShadow: '0 1px 2px rgba(0,0,0,0.2)',
-                  position: 'relative',
-                  overflow: 'hidden'
+                  position: 'relative'
                 }}
               >
                 {/* Floating Quick Reaction Bar */}
@@ -781,7 +833,7 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
                     position: 'absolute',
                     top: '4px',
                     right: '4px',
-                    backgroundColor: 'rgba(35, 49, 56, 0.85)',
+                    backgroundColor: '#233138',
                     border: '1px solid #2a3942',
                     color: '#e9edef',
                     cursor: 'pointer',
@@ -791,7 +843,7 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    zIndex: 15,
+                    zIndex: 10,
                     boxShadow: '0 2px 4px rgba(0,0,0,0.4)',
                     opacity: 1
                   }}
@@ -869,7 +921,7 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
 
                 {/* Group Sender Badge */}
                 {!isMe && activeChat.is_group && (
-                  <div style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--wa-accent)', padding: isPureVisualMedia ? '4px 8px 0 8px' : '0 0 4px 0' }}>
+                  <div style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--wa-accent)', marginBottom: '4px' }}>
                     {msg.sender_name || msg.sender?.username}
                   </div>
                 )}
@@ -878,7 +930,7 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
                 {replyObj && (
                   <div style={{
                     backgroundColor: 'rgba(0,0,0,0.25)', borderLeft: '3px solid var(--wa-accent)',
-                    padding: '6px 10px', borderRadius: '4px', margin: isPureVisualMedia ? '4px 4px 2px 4px' : '0 0 6px 0', fontSize: '12px'
+                    padding: '6px 10px', borderRadius: '4px', marginBottom: '6px', fontSize: '12px'
                   }}>
                     <div style={{ fontWeight: 'bold', color: 'var(--wa-accent)' }}>
                       {replyObj.sender_name || replyObj.sender?.username || 'Replied Message'}
@@ -891,48 +943,27 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
 
                 {/* Media Content */}
                 {!isDeleted && mediaUrl && (
-                  <div>
+                  <div style={{ marginBottom: '6px' }}>
                     {mediaType === 'image' ? (
-                      <img 
-                        src={mediaUrl} 
-                        alt="Attachment" 
-                        onClick={() => window.open(mediaUrl, '_blank')}
-                        style={{ 
-                          width: '100%', 
-                          borderRadius: '6px', 
-                          maxHeight: '320px', 
-                          objectFit: 'cover', 
-                          display: 'block',
-                          cursor: 'pointer'
-                        }} 
-                      />
+                      <img src={mediaUrl} alt="Attachment" style={{ maxWidth: '100%', borderRadius: '6px', maxHeight: '240px', objectFit: 'cover', display: 'block' }} />
                     ) : mediaType === 'video' ? (
-                      <video 
-                        controls 
-                        src={mediaUrl} 
-                        style={{ 
-                          width: '100%', 
-                          borderRadius: '6px', 
-                          maxHeight: '320px', 
-                          display: 'block' 
-                        }} 
-                      />
+                      <video controls src={mediaUrl} style={{ maxWidth: '100%', borderRadius: '6px', maxHeight: '240px', display: 'block' }} />
                     ) : mediaType === 'audio' ? (
-                      <audio controls src={mediaUrl} style={{ width: '220px', margin: '4px 0' }} />
+                      <audio controls src={mediaUrl} style={{ width: '220px' }} />
                     ) : (
                       <div style={{
                         display: 'flex', alignItems: 'center', gap: '10px',
-                        backgroundColor: 'rgba(0,0,0,0.25)', borderRadius: '8px',
-                        padding: '10px 12px', margin: '4px 0'
+                        backgroundColor: 'rgba(0,0,0,0.2)', borderRadius: '8px',
+                        padding: '8px 12px', marginBottom: '4px'
                       }}>
-                        <span style={{ fontSize: '24px' }}>
+                        <span style={{ fontSize: '22px' }}>
                           {mediaType === 'document' ? '📄' : '📎'}
                         </span>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontSize: '13px', color: '#e9edef', fontWeight: '500', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                             {msg.content && msg.content.startsWith('[file:') 
                               ? msg.content.replace('[file:', '').replace(']', '') 
-                              : (mediaUrl.split('/').pop() || 'Document')}
+                              : (mediaUrl.split('/').pop() || 'File')}
                           </div>
                           <div style={{ fontSize: '11px', color: '#8696a0' }}>{mediaType === 'document' ? 'Document' : 'File'}</div>
                         </div>
@@ -1005,48 +1036,21 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
                       </button>
                     </div>
                   </div>
-                ) : hasTextCaption ? (
-                  <div style={{ fontStyle: isDeleted ? 'italic' : 'normal', color: isDeleted ? '#8696a0' : 'inherit', padding: isPureVisualMedia ? '0 8px 4px 8px' : '4px 0 0 0' }}>
-                    {isDeleted ? '🚫 This message was deleted' : renderStructuredMessage(msg.content)}
-                  </div>
-                ) : !mediaUrl ? (
+                ) : (
                   <div style={{ fontStyle: isDeleted ? 'italic' : 'normal', color: isDeleted ? '#8696a0' : 'inherit', paddingRight: '12px' }}>
                     {isDeleted ? '🚫 This message was deleted' : renderStructuredMessage(msg.content)}
                   </div>
-                ) : null}
-
-                {/* Timestamp, Edited Badge & Ticks (Overlay badge for pure visual media, standard inline for text/docs) */}
-                {isPureVisualMedia ? (
-                  <div style={{
-                    position: 'absolute',
-                    bottom: '8px',
-                    right: '8px',
-                    backgroundColor: 'rgba(11, 20, 26, 0.65)',
-                    backdropFilter: 'blur(4px)',
-                    borderRadius: '10px',
-                    padding: '2px 8px',
-                    fontSize: '10px',
-                    color: '#e9edef',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '4px',
-                    boxShadow: '0 1px 3px rgba(0,0,0,0.4)',
-                    zIndex: 5
-                  }}>
-                    {isEdited && !isDeleted && <span style={{ fontStyle: 'italic' }}>(edited)</span>}
-                    <span>{formattedTime}</span>
-                    {isMe && renderTick(msg.status)}
-                  </div>
-                ) : (
-                  <div style={{
-                    display: 'flex', justifyContent: 'flex-end', alignItems: 'center',
-                    marginTop: '4px', gap: '4px', fontSize: '10px', color: '#8696a0'
-                  }}>
-                    {isEdited && !isDeleted && <span style={{ fontStyle: 'italic', marginRight: '2px' }}>(edited)</span>}
-                    <span>{formattedTime}</span>
-                    {isMe && renderTick(msg.status)}
-                  </div>
                 )}
+
+                {/* Timestamp, Edited Badge & Ticks */}
+                <div style={{
+                  display: 'flex', justifyContent: 'flex-end', alignItems: 'center',
+                  marginTop: '4px', gap: '4px', fontSize: '10px', color: '#8696a0'
+                }}>
+                  {isEdited && !isDeleted && <span style={{ fontStyle: 'italic', marginRight: '2px' }}>(edited)</span>}
+                  <span>{formattedTime}</span>
+                  {isMe && renderTick(msg.status)}
+                </div>
 
                 {/* Emoji Reaction Badges (Positioned at bottom-left corner of message bubble) */}
                 {msg.reactions && msg.reactions.length > 0 && (
@@ -1178,7 +1182,53 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
       activeChat={activeChat}
       messages={messages}
       user={user}
+      onClearChat={() => setConfirmModalType('clear')}
+      onDeleteChat={() => setConfirmModalType('delete')}
     />
+
+    {/* Clear/Delete Chat Confirmation Modal */}
+    {confirmModalType && (
+      <div style={{
+        position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+        backgroundColor: 'rgba(0,0,0,0.7)', display: 'flex',
+        alignItems: 'center', justifyContent: 'center', zIndex: 1000
+      }}>
+        <div style={{
+          backgroundColor: '#233138', padding: '24px', borderRadius: '12px',
+          maxWidth: '380px', width: '90%', border: '1px solid var(--wa-border)',
+          boxShadow: '0 12px 32px rgba(0,0,0,0.5)'
+        }}>
+          <h3 style={{ color: 'var(--wa-text-primary)', margin: '0 0 12px 0', fontSize: '18px' }}>
+            {confirmModalType === 'clear' ? 'Clear this chat?' : 'Delete this chat?'}
+          </h3>
+          <p style={{ color: 'var(--wa-text-secondary)', fontSize: '14px', lineHeight: '1.5', margin: '0 0 24px 0' }}>
+            {confirmModalType === 'clear' 
+              ? 'Are you sure you want to clear all messages in this chat? Messages will be deleted permanently.'
+              : 'Are you sure you want to delete this chat? This chat and all its messages will be deleted.'}
+          </p>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+            <button
+              onClick={() => setConfirmModalType(null)}
+              style={{
+                padding: '8px 16px', borderRadius: '6px', border: '1px solid var(--wa-border)',
+                backgroundColor: 'transparent', color: 'var(--wa-text-primary)', cursor: 'pointer', fontWeight: '500'
+              }}
+            >
+              Cancel
+            </button>
+            <button
+              onClick={confirmModalType === 'clear' ? handleClearChat : handleDeleteChat}
+              style={{
+                padding: '8px 16px', borderRadius: '6px', border: 'none',
+                backgroundColor: '#ea4335', color: 'white', cursor: 'pointer', fontWeight: '600'
+              }}
+            >
+              {confirmModalType === 'clear' ? 'Clear chat' : 'Delete chat'}
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
   </div>
   );
 }

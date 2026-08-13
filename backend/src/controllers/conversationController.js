@@ -37,6 +37,28 @@ const conversationController = {
     } catch (err) {
       res.status(403).json({ error: err.message });
     }
+  },
+
+  async clearConversation(req, res) {
+    try {
+      const userId = req.user.id;
+      const { conversationId } = req.params;
+      const result = await conversationService.clearConversation(conversationId, userId);
+      res.json(result);
+    } catch (err) {
+      res.status(400).json({ error: err.message });
+    }
+  },
+
+  async deleteConversation(req, res) {
+    try {
+      const userId = req.user.id;
+      const { conversationId } = req.params;
+      const result = await conversationService.deleteConversation(conversationId, userId);
+      res.json(result);
+    } catch (err) {
+      res.status(400).json({ error: err.message });
+    }
   }
 };
 

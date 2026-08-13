@@ -242,3 +242,17 @@ export async function updateCallStatus(callId, status, duration_seconds = 0) {
   return data.call;
 }
 
+export async function clearChat(chatId) {
+  return apiFetch(`/chats/${chatId}/clear`, {
+    method: 'DELETE',
+    headers: getAuthHeaders(),
+  });
+}
+
+export async function deleteChat(chatId) {
+  return apiFetch(`/chats/${chatId}`, {
+    method: 'DELETE',
+    headers: getAuthHeaders(),
+  });
+}
+

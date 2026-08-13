@@ -1,6 +1,6 @@
 import React from 'react';
 
-export default function ContactInfoSidebar({ isOpen, onClose, activeChat, messages = [], user }) {
+export default function ContactInfoSidebar({ isOpen, onClose, activeChat, messages = [], user, onClearChat, onDeleteChat }) {
   if (!isOpen || !activeChat) return null;
 
   const isGroup = activeChat.is_group;
@@ -320,9 +320,7 @@ export default function ContactInfoSidebar({ isOpen, onClose, activeChat, messag
         {/* Clear Chat */}
         <div
           onClick={() => {
-            if (window.confirm('Are you sure you want to clear this chat?')) {
-              alert('Chat messages cleared cleanly.');
-            }
+            if (onClearChat) onClearChat();
           }}
           style={{
             display: 'flex',
@@ -341,9 +339,7 @@ export default function ContactInfoSidebar({ isOpen, onClose, activeChat, messag
         {/* Delete Chat */}
         <div
           onClick={() => {
-            if (window.confirm('Are you sure you want to delete this chat?')) {
-              onClose();
-            }
+            if (onDeleteChat) onDeleteChat();
           }}
           style={{
             display: 'flex',
