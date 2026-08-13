@@ -217,7 +217,7 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
     if (e) e.preventDefault();
     if ((!inputText.trim() && !mediaUrl) || !activeChat) return;
 
-    const content = inputText.trim() || (originalName ? `[file:${originalName}]` : '');
+    const content = inputText.trim();
     const replyTarget = replyingTo;
     setInputText('');
     setReplyingTo(null);
@@ -1037,9 +1037,19 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
                     </div>
                   </div>
                 ) : (
-                  <div style={{ fontStyle: isDeleted ? 'italic' : 'normal', color: isDeleted ? '#8696a0' : 'inherit', paddingRight: '12px' }}>
-                    {isDeleted ? '🚫 This message was deleted' : renderStructuredMessage(msg.content)}
-                  </div>
+                  <>
+                    {isDeleted ? (
+                      <div style={{ fontStyle: 'italic', color: '#8696a0', paddingRight: '12px' }}>
+                        🚫 This message was deleted
+                      </div>
+                    ) : (
+                      Boolean(msg.content && !msg.content.startsWith('[file:') && !msg.content.startsWith('[image:') && !msg.content.startsWith('[video:') && !msg.content.startsWith('[audio:')) && (
+                        <div style={{ fontStyle: 'normal', color: 'inherit', paddingRight: '12px' }}>
+                          {renderStructuredMessage(msg.content)}
+                        </div>
+                      )
+                    )}
+                  </>
                 )}
 
                 {/* Timestamp, Edited Badge & Ticks */}

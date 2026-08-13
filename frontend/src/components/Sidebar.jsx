@@ -552,7 +552,19 @@ export default function Sidebar({ chats = [], activeChatId, onSelectChat, onChat
                               {lastMsg?.status === 'read' ? '✓✓' : lastMsg?.status === 'delivered' ? '✓✓' : '✓'}
                             </span>
                           )}
-                          {lastMsg?.content || (lastMsg?.mediaUrl || lastMsg?.media_url ? '📎 Attachment' : 'No messages yet')}
+                          {(() => {
+                            if (!lastMsg) return 'No messages yet';
+                            if (lastMsg.is_deleted || lastMsg.isDeleted) return '🚫 This message was deleted';
+                            const hasText = lastMsg.content && !lastMsg.content.startsWith('[file:') && !lastMsg.content.startsWith('[image:') && !lastMsg.content.startsWith('[video:') && !lastMsg.content.startsWith('[audio:');
+                            if (hasText) return lastMsg.content;
+                            const mType = lastMsg.media_type || lastMsg.type || 'text';
+                            if (mType === 'image') return '📷 Photo';
+                            if (mType === 'video') return '🎥 Video';
+                            if (mType === 'audio') return '🎵 Voice message';
+                            if (mType === 'document' || mType === 'file') return '📄 Document';
+                            if (lastMsg.media_url || lastMsg.mediaUrl) return '📎 Attachment';
+                            return lastMsg.content || 'No messages yet';
+                          })()}
                         </div>
 
                         {hasUnread && (
