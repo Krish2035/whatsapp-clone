@@ -19,15 +19,20 @@ const messageService = {
       const otherParticipants = await conversationService.getOtherParticipants(conversationId, senderId);
       if (otherParticipants.length > 0) {
         targetReceiverId = otherParticipants[0];
+      } else {
+        targetReceiverId = senderId;
       }
     }
+
+    // Self-chat messages (sender === receiver) are instantly read with double blue ticks
+    const initialStatus = String(senderId) === String(targetReceiverId) ? 'read' : 'sent';
 
     // Insert message into database
     const result = await pool.query(
       `INSERT INTO messages (chat_id, sender_id, receiver_id, content, media_url, media_type, status, reply_to_id, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, 'sent', $7, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
        RETURNING id, chat_id as "conversationId", sender_id as "senderId", receiver_id as "receiverId", content, media_url as "mediaUrl", media_type as "type", status, reply_to_id as "replyToId", created_at as "createdAt", updated_at as "updatedAt"`,
-      [conversationId, senderId, targetReceiverId || null, content || '', mediaUrl || null, mediaType, replyToId]
+      [conversationId, senderId, targetReceiverId || null, content || '', mediaUrl || null, mediaType, initialStatus, replyToId]
     );
 
     const message = result.rows[0];

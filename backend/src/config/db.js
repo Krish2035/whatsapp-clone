@@ -54,6 +54,9 @@ async function ensurePgSchema(poolInstance) {
         await poolInstance.query("ALTER TABLE messages ADD COLUMN IF NOT EXISTS media_type VARCHAR(50) DEFAULT 'text'");
         await poolInstance.query('ALTER TABLE messages ADD COLUMN IF NOT EXISTS reply_to_id INTEGER REFERENCES messages(id) ON DELETE SET NULL');
         await poolInstance.query('ALTER TABLE chats ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP');
+        
+        // Auto-update self-chat messages to 'read' status
+        await poolInstance.query("UPDATE messages SET status = 'read' WHERE sender_id = receiver_id OR receiver_id IS NULL");
       } catch (colErr) {
         console.warn('PostgreSQL column auto-migration warning:', colErr.message);
       }
