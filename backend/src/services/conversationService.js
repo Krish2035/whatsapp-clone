@@ -5,37 +5,66 @@ const conversationService = {
    * Find an existing 1-to-1 conversation between userA and userB, or create a new one.
    */
   async findOrCreateOneToOneConversation(userAId, userBId) {
-    if (userAId === userBId) {
-      throw new Error('Cannot create a conversation with yourself');
-    }
+    const numUserA = parseInt(userAId, 10);
+    const numUserB = parseInt(userBId, 10);
 
     // Verify target user B exists
-    const targetUser = await pool.query('SELECT id FROM users WHERE id = $1', [userBId]);
+    const targetUser = await pool.query('SELECT id FROM users WHERE id = $1', [numUserB]);
     if (targetUser.rows.length === 0) {
       throw new Error('Target user does not exist');
     }
 
-    // Check for existing 1-to-1 chat containing both participants
+    if (numUserA === numUserB) {
+      // Check for existing self-chat
+      const selfChatRes = await pool.query(
+        `SELECT c.id
+         FROM chats c
+         JOIN chat_participants cp ON c.id = cp.chat_id
+         WHERE c.is_group = FALSE
+         GROUP BY c.id
+         HAVING COUNT(cp.user_id) = 1 AND MAX(cp.user_id) = $1
+         LIMIT 1`,
+        [numUserA]
+      );
+
+      if (selfChatRes.rows.length > 0) {
+        return await this.getConversationById(selfChatRes.rows[0].id, numUserA);
+      }
+
+      // Create new self-chat
+      const newChatRes = await pool.query(
+        `INSERT INTO chats (is_group, created_at, updated_at)
+         VALUES (FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+         RETURNING id`
+      );
+      const chatId = newChatRes.rows[0].id;
+      await pool.query('INSERT INTO chat_participants (chat_id, user_id) VALUES ($1, $2)', [chatId, numUserA]);
+      return await this.getConversationById(chatId, numUserA);
+    }
+
+    // Check for existing 1-to-1 chat containing both distinct participants
     const existingChatResult = await pool.query(
       `SELECT c.id
        FROM chats c
        JOIN chat_participants cp1 ON c.id = cp1.chat_id AND cp1.user_id = $1
        JOIN chat_participants cp2 ON c.id = cp2.chat_id AND cp2.user_id = $2
        WHERE c.is_group = FALSE
+       GROUP BY c.id
+       HAVING COUNT(DISTINCT cp1.user_id) = 2
        LIMIT 1`,
-      [userAId, userBId]
+      [numUserA, numUserB]
     );
 
     if (existingChatResult.rows.length > 0) {
       const chatId = existingChatResult.rows[0].id;
-      return await this.getConversationById(chatId, userAId);
+      return await this.getConversationById(chatId, numUserA);
     }
 
     // Create new chat row
     const newChatResult = await pool.query(
       `INSERT INTO chats (is_group, created_at, updated_at)
        VALUES (FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-       RETURNING id, is_group, created_at, updated_at`
+       RETURNING id`
     );
 
     const chatId = newChatResult.rows[0]?.id;
@@ -46,16 +75,11 @@ const conversationService = {
     // Insert participants
     await pool.query(
       `INSERT INTO chat_participants (chat_id, user_id)
-       VALUES ($1, $2)`,
-      [chatId, userAId]
-    );
-    await pool.query(
-      `INSERT INTO chat_participants (chat_id, user_id)
-       VALUES ($1, $2)`,
-      [chatId, userBId]
+       VALUES ($1, $2), ($1, $3)`,
+      [chatId, numUserA, numUserB]
     );
 
-    return await this.getConversationById(chatId, userAId);
+    return await this.getConversationById(chatId, numUserA);
   },
 
   /**

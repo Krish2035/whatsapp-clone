@@ -536,7 +536,10 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
     const otherParticipant = activeChat.participants?.find(
       (p) => String(p.id) !== String(user?.id)
     );
-    return otherParticipant ? otherParticipant.username : 'Chat';
+    if (!otherParticipant) {
+      return `${user?.username || 'You'} (You)`;
+    }
+    return otherParticipant.username || 'Chat';
   };
 
   const renderTick = (status) => {

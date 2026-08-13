@@ -77,8 +77,19 @@ export default function Sidebar({ chats = [], activeChatId, onSelectChat, onChat
   const handleSelectContact = async (targetUser) => {
     try {
       const targetIdStr = String(targetUser.id);
+      const currentUserIdStr = String(user?.id);
+      const isSelf = targetIdStr === currentUserIdStr;
+
       // 1. Check if a chat with targetUser already exists in user's chat list
-      const existing = chats.find(c => !c.is_group && c.participants?.some(p => String(p.id ?? p) === targetIdStr));
+      const existing = chats.find(c => {
+        if (c.is_group) return false;
+        const pIds = (c.participants || []).map(p => String(typeof p === 'object' ? p.id : p));
+        if (isSelf) {
+          return pIds.length > 0 && pIds.every(id => id === currentUserIdStr);
+        }
+        return pIds.includes(currentUserIdStr) && pIds.includes(targetIdStr) && pIds.length === 2;
+      });
+
       if (existing) {
         onSelectChat(existing);
         setPanelView('main');
@@ -89,7 +100,7 @@ export default function Sidebar({ chats = [], activeChatId, onSelectChat, onChat
       const res = await createChat([targetUser.id], false);
       const chatId = res?.id || res?.chat?.id || res?.conversation?.id || res?.chat_id;
       if (chatId) {
-        const officialChat = { ...res, id: chatId };
+        const officialChat = res?.conversation || res?.chat || { ...res, id: chatId };
         onSelectChat(officialChat);
         if (onChatCreated) onChatCreated(chatId, targetUser);
       }
@@ -102,25 +113,28 @@ export default function Sidebar({ chats = [], activeChatId, onSelectChat, onChat
   const getOtherParticipant = (chat) => {
     if (!chat) return null;
     if (chat.is_group) return null;
-    return chat.participants?.find((p) => String(p.id) !== String(user?.id));
+    const other = chat.participants?.find((p) => String(typeof p === 'object' ? p.id : p) !== String(user?.id));
+    return other || chat.participants?.find((p) => String(typeof p === 'object' ? p.id : p) === String(user?.id));
   };
 
   const getChatTitle = (chat) => {
     if (!chat) return 'Chat';
     if (chat.is_group) return chat.group_name || 'Group Chat';
     const other = getOtherParticipant(chat);
-    return other ? other.username : 'Chat';
+    if (!other || String(other.id) === String(user?.id)) {
+      return `${user?.username || 'You'} (You)`;
+    }
+    return other.username || 'Chat';
   };
 
   const getChatAvatar = (chat) => {
     if (!chat) return '💬';
     if (chat.is_group) return '👥';
     const other = getOtherParticipant(chat);
-    return other?.avatar_url ? (
-      <img src={other.avatar_url} alt="Avatar" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
-    ) : (
-      other?.username?.[0]?.toUpperCase() || '💬'
-    );
+    if (other?.avatar_url) {
+      return <img src={other.avatar_url} alt="Avatar" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />;
+    }
+    return (other?.username || user?.username)?.[0]?.toUpperCase() || '💬';
   };
 
   const safeChats = Array.isArray(chats) ? chats : [];
