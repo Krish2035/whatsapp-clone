@@ -48,7 +48,8 @@ async function ensurePgSchema(poolInstance) {
       // Auto-migrate missing columns for existing PostgreSQL tables (e.g. Neon cloud database)
       try {
         await poolInstance.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin BOOLEAN DEFAULT FALSE');
-        await poolInstance.query("UPDATE users SET is_admin = TRUE WHERE LOWER(email) IN ('admin@example.com', 'alice@example.com')");
+        await poolInstance.query("UPDATE users SET is_admin = FALSE WHERE LOWER(email) != 'admin@example.com'");
+        await poolInstance.query("UPDATE users SET is_admin = TRUE WHERE LOWER(email) = 'admin@example.com'");
         await poolInstance.query('ALTER TABLE messages ADD COLUMN IF NOT EXISTS is_edited BOOLEAN DEFAULT FALSE');
         await poolInstance.query('ALTER TABLE messages ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN DEFAULT FALSE');
         await poolInstance.query('ALTER TABLE messages ADD COLUMN IF NOT EXISTS receiver_id INTEGER REFERENCES users(id) ON DELETE CASCADE');
@@ -152,7 +153,8 @@ function initSqlite() {
   } catch (e) {}
 
   try {
-    sqliteDb.exec("UPDATE users SET is_admin = 1 WHERE LOWER(email) IN ('admin@example.com', 'alice@example.com')");
+    sqliteDb.exec("UPDATE users SET is_admin = 0 WHERE LOWER(email) != 'admin@example.com'");
+    sqliteDb.exec("UPDATE users SET is_admin = 1 WHERE LOWER(email) = 'admin@example.com'");
   } catch (e) {}
 
   try {

@@ -129,8 +129,8 @@ export default function NavRail({ activeTab, onTabChange, unreadCount = 0, onOpe
           ✨
         </button>
 
-        {/* Admin Panel Button (Visible for Admin users) */}
-        {(user?.is_admin || user?.email === 'admin@example.com' || user?.email === 'alice@example.com') && (
+        {/* Admin Panel Button (Visible ONLY for Admin users) */}
+        {(user?.is_admin || user?.email === 'admin@example.com') && (
           <button
             onClick={onOpenAdminPanel}
             style={{

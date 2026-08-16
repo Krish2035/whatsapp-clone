@@ -3,7 +3,7 @@
 
 INSERT INTO users (id, username, email, password_hash, status_message, is_admin)
 VALUES 
-  (1, 'Alice', 'alice@example.com', '$2a$10$BKklCaHd68Em5uBryWfb7OWAlZbNCKJhvOYsCWgkTRGguOVcYlzKO', 'Available | Coding with React & Node!', TRUE),
+  (1, 'Alice', 'alice@example.com', '$2a$10$BKklCaHd68Em5uBryWfb7OWAlZbNCKJhvOYsCWgkTRGguOVcYlzKO', 'Available | Coding with React & Node!', FALSE),
   (2, 'Bob', 'bob@example.com', '$2a$10$BKklCaHd68Em5uBryWfb7OWAlZbNCKJhvOYsCWgkTRGguOVcYlzKO', 'At work | Working on WhatsApp clone', FALSE),
   (3, 'Charlie', 'charlie@example.com', '$2a$10$BKklCaHd68Em5uBryWfb7OWAlZbNCKJhvOYsCWgkTRGguOVcYlzKO', 'Busy | Sleeping', FALSE),
   (4, 'Admin', 'admin@example.com', '$2a$10$BKklCaHd68Em5uBryWfb7OWAlZbNCKJhvOYsCWgkTRGguOVcYlzKO', 'System Administrator', TRUE)
