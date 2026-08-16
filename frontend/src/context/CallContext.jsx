@@ -6,7 +6,9 @@ import { webrtcService } from '../services/webrtcService';
 import { ringtoneService } from '../services/ringtoneService';
 import { fetchCalls, createCallRecord, updateCallStatus as apiUpdateCallStatus } from '../services/api';
 
-export { CallContext };
+import { useCall } from './useCall';
+
+export { CallContext, useCall };
 
 export function CallProvider({ children }) {
   const { user: authUser } = useAuth();

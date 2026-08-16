@@ -10,7 +10,7 @@ import {
   fetchAdminActiveCalls,
 } from '../services/api';
 import { socketService } from '../services/socket';
-import { useCall } from '../context/CallContext';
+import { useCall } from '../context/useCall';
 
 export default function AdminPanelModal({ isOpen, onClose }) {
   const [activeTab, setActiveTab] = useState('overview');
