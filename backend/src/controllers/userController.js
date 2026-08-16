@@ -28,7 +28,7 @@ exports.getMe = async (req, res, next) => {
   try {
     const currentUserId = req.user.id;
     const result = await pool.query(
-      `SELECT id, username, email, avatar_url, status_message, created_at 
+      `SELECT id, username, email, avatar_url, status_message, is_admin, is_online, last_seen, created_at 
        FROM users WHERE id = $1`,
       [currentUserId]
     );

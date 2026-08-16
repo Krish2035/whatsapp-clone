@@ -77,7 +77,7 @@ const authService = {
 
   async getUserById(userId) {
     const result = await pool.query(
-      'SELECT id, username, email, avatar_url, status_message, is_online, last_seen, created_at FROM users WHERE id = $1',
+      'SELECT id, username, email, avatar_url, status_message, is_admin, is_online, last_seen, created_at FROM users WHERE id = $1',
       [userId]
     );
     return result.rows[0] || null;

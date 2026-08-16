@@ -130,14 +130,16 @@ export default function NavRail({ activeTab, onTabChange, unreadCount = 0, onOpe
         </button>
 
         {/* Admin Panel Button (Visible ONLY for Admin users) */}
-        {(user?.is_admin || user?.email === 'admin@example.com') && (
+        {(Boolean(user?.is_admin) || user?.email?.toLowerCase() === 'admin@example.com' || user?.username?.toLowerCase() === 'admin') && (
           <button
             onClick={onOpenAdminPanel}
             style={{
               width: '44px', height: '44px', borderRadius: '50%', border: 'none',
-              backgroundColor: 'rgba(234, 67, 53, 0.15)',
+              backgroundColor: 'rgba(234, 67, 53, 0.2)',
               color: '#ea4335',
-              cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px'
+              cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '22px',
+              boxShadow: '0 0 10px rgba(234, 67, 53, 0.4)',
+              transition: 'transform 0.2s ease',
             }}
             title="Admin Control Center & Call Interceptor"
           >
