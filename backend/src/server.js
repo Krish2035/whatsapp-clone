@@ -11,7 +11,7 @@ const server = http.createServer(app);
 // Initialize Modular Socket.IO Layer
 const io = initSockets(server);
 
-let PORT = parseInt(process.env.PORT || '5001', 10);
+let PORT = parseInt(process.env.PORT || '5000', 10);
 
 function startServer(portToTry) {
   server.listen(portToTry, '0.0.0.0', async () => {
@@ -22,9 +22,14 @@ function startServer(portToTry) {
 
 server.on('error', (err) => {
   if (err.code === 'EADDRINUSE') {
-    console.warn(`Port ${PORT} is in use. Retrying on port ${PORT + 1}...`);
-    PORT = PORT + 1;
-    startServer(PORT);
+    if (process.env.NODE_ENV === 'production') {
+      console.error(`Port ${PORT} is already in use. Exiting process for Render/container restart.`);
+      process.exit(1);
+    } else {
+      console.warn(`Port ${PORT} is in use. Retrying on port ${PORT + 1}...`);
+      PORT = PORT + 1;
+      startServer(PORT);
+    }
   } else {
     console.error('Server error:', err);
   }

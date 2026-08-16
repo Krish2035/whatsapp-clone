@@ -1,6 +1,8 @@
+'use client';
+
 import React from 'react';
-import Home from './pages/Home';
-import AuthPage from './pages/AuthPage';
+import Home from './views/Home';
+import AuthPage from './views/AuthPage';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { CallProvider } from './context/CallContext';
 import CallModal from './components/CallModal';

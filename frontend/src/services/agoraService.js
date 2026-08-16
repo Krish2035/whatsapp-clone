@@ -1,10 +1,13 @@
 import AgoraRTC from 'agora-rtc-sdk-ng';
+import { getEnv } from '../utils/env';
 
-// Default demo Agora App ID for development (or set VITE_AGORA_APP_ID in frontend/.env)
-export const AGORA_APP_ID = import.meta.env.VITE_AGORA_APP_ID || '4876b5d9bc3741ec9cb33b3dcfdbca91';
+export const AGORA_APP_ID = getEnv('VITE_AGORA_APP_ID', '4876b5d9bc3741ec9cb33b3dcfdbca91');
 
-// Set logging level for Agora SDK
-AgoraRTC.setLogLevel(2); // 0: DEBUG, 1: INFO, 2: WARNING, 3: ERROR, 4: NONE
+if (typeof window !== 'undefined') {
+  try {
+    AgoraRTC.setLogLevel(2);
+  } catch (e) {}
+}
 
 export class AgoraService {
   constructor() {

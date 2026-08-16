@@ -1,3 +1,5 @@
+import { getEnv } from '../utils/env';
+
 /**
  * Firebase Realtime WebRTC Call Room Signaling Gateway
  * Supports private call rooms (`call_rooms/{roomId}`) for peer-to-peer audio & video calls.
@@ -11,23 +13,24 @@ class FirebaseService {
     this.firestoreModule = null;
     this.activeListeners = new Map();
     this.memoryRooms = new Map();
-    this.projectId = import.meta.env.VITE_FIREBASE_PROJECT_ID || "whatsapp-clone-demo";
+    this.projectId = getEnv('VITE_FIREBASE_PROJECT_ID', 'whatsapp-clone-demo');
   }
 
   async init() {
+    if (typeof window === 'undefined') return null;
     if (this.db) return this.db;
 
     try {
-      const firebaseApp = await import(/* @vite-ignore */ 'firebase/app');
-      const firestore = await import(/* @vite-ignore */ 'firebase/firestore');
+      const firebaseApp = await import('firebase/app');
+      const firestore = await import('firebase/firestore');
 
       const firebaseConfig = {
-        apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyDemoWhatsAppWebCloneApiKey123",
-        authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || `${this.projectId}.firebaseapp.com`,
+        apiKey: getEnv('VITE_FIREBASE_API_KEY', 'AIzaSyDemoWhatsAppWebCloneApiKey123'),
+        authDomain: getEnv('VITE_FIREBASE_AUTH_DOMAIN', `${this.projectId}.firebaseapp.com`),
         projectId: this.projectId,
-        storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || `${this.projectId}.appspot.com`,
-        messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "123456789012",
-        appId: import.meta.env.VITE_FIREBASE_APP_ID || "1:123456789012:web:demo1234567890"
+        storageBucket: getEnv('VITE_FIREBASE_STORAGE_BUCKET', `${this.projectId}.appspot.com`),
+        messagingSenderId: getEnv('VITE_FIREBASE_MESSAGING_SENDER_ID', '123456789012'),
+        appId: getEnv('VITE_FIREBASE_APP_ID', '1:123456789012:web:demo1234567890')
       };
 
       this.app = firebaseApp.getApps().length === 0 ? firebaseApp.initializeApp(firebaseConfig) : firebaseApp.getApps()[0];

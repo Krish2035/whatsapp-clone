@@ -1,9 +1,21 @@
 -- Sample Seed Data for WhatsApp Clone
 -- Default password for all seed users is 'password123'
 
-INSERT INTO users (username, email, password_hash, status_message)
+INSERT INTO users (id, username, email, password_hash, status_message)
 VALUES 
-  ('Alice', 'alice@example.com', '$2a$10$BKklCaHd68Em5uBryWfb7OWAlZbNCKJhvOYsCWgkTRGguOVcYlzKO', 'Available | Coding with React & Node!'),
-  ('Bob', 'bob@example.com', '$2a$10$BKklCaHd68Em5uBryWfb7OWAlZbNCKJhvOYsCWgkTRGguOVcYlzKO', 'At work | Working on WhatsApp clone'),
-  ('Charlie', 'charlie@example.com', '$2a$10$BKklCaHd68Em5uBryWfb7OWAlZbNCKJhvOYsCWgkTRGguOVcYlzKO', 'Busy | Sleeping')
-ON CONFLICT (email) DO NOTHING;
+  (1, 'Alice', 'alice@example.com', '$2a$10$BKklCaHd68Em5uBryWfb7OWAlZbNCKJhvOYsCWgkTRGguOVcYlzKO', 'Available | Coding with React & Node!'),
+  (2, 'Bob', 'bob@example.com', '$2a$10$BKklCaHd68Em5uBryWfb7OWAlZbNCKJhvOYsCWgkTRGguOVcYlzKO', 'At work | Working on WhatsApp clone'),
+  (3, 'Charlie', 'charlie@example.com', '$2a$10$BKklCaHd68Em5uBryWfb7OWAlZbNCKJhvOYsCWgkTRGguOVcYlzKO', 'Busy | Sleeping')
+ON CONFLICT DO NOTHING;
+
+INSERT INTO chats (id, is_group, group_name)
+VALUES (1, FALSE, NULL)
+ON CONFLICT DO NOTHING;
+
+INSERT INTO chat_participants (chat_id, user_id)
+VALUES (1, 1), (1, 2)
+ON CONFLICT DO NOTHING;
+
+INSERT INTO messages (id, chat_id, sender_id, receiver_id, content, status)
+VALUES (1, 1, 2, 1, 'Hello Alice! Welcome to WhatsApp Web.', 'delivered')
+ON CONFLICT DO NOTHING;

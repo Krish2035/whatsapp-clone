@@ -6,10 +6,14 @@ backend/node_modules/
 # Production Builds
 frontend/dist/
 frontend/build/
+frontend/.next/
+.next/
 
 # Environment Variables
 .env
+*.env
 backend/.env
+frontend/.env
 frontend/.env.local
 
 # Logs

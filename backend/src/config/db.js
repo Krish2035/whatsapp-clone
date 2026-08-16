@@ -67,7 +67,12 @@ async function ensurePgSchema(poolInstance) {
     if (fs.existsSync(seedPath)) {
       try {
         const seedSql = fs.readFileSync(seedPath, 'utf8');
-        await poolInstance.query(seedSql);
+        const statements = seedSql.split(';').map((s) => s.trim()).filter(Boolean);
+        for (const stmt of statements) {
+          try {
+            await poolInstance.query(stmt);
+          } catch (e) {}
+        }
         console.log('✅ PostgreSQL Seed users (Alice, Bob, Charlie) initialized automatically.');
       } catch (e) {}
     }
@@ -145,6 +150,26 @@ function initSqlite() {
   } catch (e) {}
 
   try {
+    sqliteDb.exec('ALTER TABLE messages ADD COLUMN is_edited INTEGER DEFAULT 0');
+  } catch (e) {}
+
+  try {
+    sqliteDb.exec('ALTER TABLE messages ADD COLUMN is_deleted INTEGER DEFAULT 0');
+  } catch (e) {}
+
+  try {
+    sqliteDb.exec('ALTER TABLE messages ADD COLUMN reply_to_id INTEGER REFERENCES messages(id)');
+  } catch (e) {}
+
+  try {
+    sqliteDb.exec('ALTER TABLE messages ADD COLUMN media_url TEXT');
+  } catch (e) {}
+
+  try {
+    sqliteDb.exec("ALTER TABLE messages ADD COLUMN media_type TEXT DEFAULT 'text'");
+  } catch (e) {}
+
+  try {
     sqliteDb.exec('ALTER TABLE chats ADD COLUMN updated_at DATETIME');
   } catch (e) {}
 
@@ -184,7 +209,8 @@ function prepareSqliteQuery(sql, params = []) {
   .replace(/\bILIKE\b/gi, 'LIKE')
   .replace(/json_build_object/gi, 'json_object')
   .replace(/json_agg/gi, 'json_group_array')
-  .replace(/\bNOW\(\)/gi, 'CURRENT_TIMESTAMP');
+  .replace(/\bNOW\(\)/gi, 'CURRENT_TIMESTAMP')
+  .replace(/::[a-z_]+/gi, '');
 
   return { sql: translatedSql, params: newParams };
 }

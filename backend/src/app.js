@@ -41,6 +41,15 @@ app.use('/uploads', express.static(path.join(__dirname, '../uploads'), {
   }
 }));
 
+// Root Service Status Endpoint for Render / Uptime Checkers
+app.get('/', (req, res) => {
+  res.json({
+    service: 'WhatsApp Clone Backend API',
+    status: 'online',
+    timestamp: new Date().toISOString()
+  });
+});
+
 // Health Check Endpoint
 app.get('/api/health', async (req, res) => {
   try {

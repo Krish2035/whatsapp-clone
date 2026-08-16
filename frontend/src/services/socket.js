@@ -1,10 +1,9 @@
 import { io } from 'socket.io-client';
+import { getEnv } from '../utils/env';
 
 const getSocketUrl = () => {
-  if (import.meta.env.VITE_SOCKET_URL) {
-    return import.meta.env.VITE_SOCKET_URL;
-  }
-  return undefined;
+  const url = getEnv('VITE_SOCKET_URL') || getEnv('NEXT_PUBLIC_SOCKET_URL') || 'http://localhost:5000';
+  return url;
 };
 
 const SOCKET_URL = getSocketUrl();

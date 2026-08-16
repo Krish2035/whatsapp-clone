@@ -1,5 +1,7 @@
+import { getEnv } from '../utils/env';
+
 const getAuthHeaders = () => {
-  const token = localStorage.getItem('token');
+  const token = typeof localStorage !== 'undefined' ? localStorage.getItem('token') : null;
   return {
     'Content-Type': 'application/json',
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -21,8 +23,8 @@ async function handleResponse(res) {
 }
 
 async function apiFetch(endpoint, options = {}) {
-  let baseUrl = import.meta.env.VITE_API_URL || '/api';
-  if (baseUrl.startsWith('http') && !baseUrl.endsWith('/api')) {
+  let baseUrl = getEnv('VITE_API_URL') || getEnv('NEXT_PUBLIC_API_URL') || 'http://localhost:5000/api';
+  if (!baseUrl.endsWith('/api') && baseUrl.startsWith('http')) {
     baseUrl = baseUrl.replace(/\/+$/, '') + '/api';
   }
   const url = `${baseUrl}${endpoint}`;
@@ -143,12 +145,12 @@ export async function uploadMedia(file) {
   const formData = new FormData();
   formData.append('file', file);
 
-  const token = localStorage.getItem('token') || sessionStorage.getItem('token');
+  const token = typeof localStorage !== 'undefined' ? (localStorage.getItem('token') || sessionStorage.getItem('token')) : null;
   const headers = {};
   if (token) headers['Authorization'] = `Bearer ${token}`;
 
-  let baseUrl = import.meta.env.VITE_API_URL || '/api';
-  if (baseUrl.startsWith('http') && !baseUrl.endsWith('/api')) {
+  let baseUrl = getEnv('VITE_API_URL') || getEnv('NEXT_PUBLIC_API_URL') || 'http://localhost:5000/api';
+  if (!baseUrl.endsWith('/api') && baseUrl.startsWith('http')) {
     baseUrl = baseUrl.replace(/\/+$/, '') + '/api';
   }
 

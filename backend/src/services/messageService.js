@@ -119,7 +119,7 @@ const messageService = {
             FROM message_reactions mr
             WHERE mr.message_id = m.id
           ),
-          '[]'::json
+          '[]'
         ) as reactions
        FROM messages m
        JOIN users u ON m.sender_id = u.id

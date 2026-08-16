@@ -4,10 +4,12 @@
  */
 
 import { ringtoneService } from './ringtoneService';
+import { getEnv } from '../utils/env';
 
 let _remoteAudioEl = null;
 
 function getRemoteAudioEl() {
+  if (typeof document === 'undefined') return null;
   if (!_remoteAudioEl) {
     _remoteAudioEl = document.createElement('audio');
     _remoteAudioEl.autoplay = true;
@@ -19,10 +21,10 @@ function getRemoteAudioEl() {
 }
 
 function getIceServersConfig() {
-  const customStun = import.meta.env?.VITE_STUN_SERVER;
-  const customTurn = import.meta.env?.VITE_TURN_SERVER;
-  const customTurnUsername = import.meta.env?.VITE_TURN_USERNAME;
-  const customTurnCredential = import.meta.env?.VITE_TURN_CREDENTIAL;
+  const customStun = getEnv('VITE_STUN_SERVER');
+  const customTurn = getEnv('VITE_TURN_SERVER');
+  const customTurnUsername = getEnv('VITE_TURN_USERNAME');
+  const customTurnCredential = getEnv('VITE_TURN_CREDENTIAL');
 
   const stunUrls = customStun
     ? customStun.split(',').map((u) => u.trim())
