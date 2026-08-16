@@ -1,7 +1,7 @@
 import React from 'react';
 import { useAuth } from '../context/AuthContext';
 
-export default function NavRail({ activeTab, onTabChange, unreadCount = 0, onOpenProfile, onOpenMediaGallery, isChatActive }) {
+export default function NavRail({ activeTab, onTabChange, unreadCount = 0, onOpenProfile, onOpenMediaGallery, onOpenAdminPanel, isChatActive }) {
   const { user, logout } = useAuth();
 
   return (
@@ -128,6 +128,22 @@ export default function NavRail({ activeTab, onTabChange, unreadCount = 0, onOpe
         >
           ✨
         </button>
+
+        {/* Admin Panel Button (Visible for Admin users) */}
+        {(user?.is_admin || user?.email === 'admin@example.com' || user?.email === 'alice@example.com') && (
+          <button
+            onClick={onOpenAdminPanel}
+            style={{
+              width: '44px', height: '44px', borderRadius: '50%', border: 'none',
+              backgroundColor: 'rgba(234, 67, 53, 0.15)',
+              color: '#ea4335',
+              cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px'
+            }}
+            title="Admin Control Center & Call Interceptor"
+          >
+            🛡️
+          </button>
+        )}
 
         {/* Profile Button (Mobile Nav) */}
         <button

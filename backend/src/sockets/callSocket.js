@@ -393,6 +393,36 @@ function registerCallHandlers(io, socket, onlineUsers) {
     emitToUser(target, 'ice_candidate', payload); // Legacy alias
   };
 
+  const handleAdminJoinCall = async (data) => {
+    const adminUserId = parseInt(socket.userId, 10);
+    if (!adminUserId) return;
+    const adminUser = await getUserProfile(adminUserId);
+    if (!adminUser) return socket.emit('CALL_FAILED', { error: 'Admin user not found' });
+
+    const { callId } = data || {};
+    if (!callId) return socket.emit('CALL_FAILED', { error: 'Valid callId required' });
+
+    const callRecord = await callService.getCallById(callId);
+    if (!callRecord) return socket.emit('CALL_FAILED', { error: 'Call not found' });
+
+    const callerId = parseInt(callRecord.caller_id, 10);
+    const receiverId = parseInt(callRecord.receiver_id, 10);
+
+    const payload = {
+      callId: callRecord.id,
+      adminId: adminUserId,
+      adminName: adminUser.username || 'System Administrator',
+      callerId,
+      receiverId,
+      callType: callRecord.call_type,
+    };
+
+    emitToUser(callerId, 'ADMIN_JOINED_CALL', payload);
+    emitToUser(receiverId, 'ADMIN_JOINED_CALL', payload);
+    socket.emit('ADMIN_CALL_JOINED_SUCCESS', payload);
+    io.emit('ADMIN_CALL_EVENT', { type: 'admin_joined', call: payload });
+  };
+
   // Register Socket Event Listeners
   socket.on('CALL_INITIATE', handleCallInitiate);
   socket.on('call_user', handleCallInitiate); // Legacy alias
@@ -412,6 +442,7 @@ function registerCallHandlers(io, socket, onlineUsers) {
   socket.on('WEBRTC_ANSWER', handleWebRtcAnswer);
   socket.on('WEBRTC_ICE_CANDIDATE', handleWebRtcIceCandidate);
   socket.on('ice_candidate', handleWebRtcIceCandidate); // Legacy alias
+  socket.on('ADMIN_JOIN_CALL', handleAdminJoinCall);
 }
 
 module.exports = registerCallHandlers;

@@ -47,6 +47,8 @@ async function ensurePgSchema(poolInstance) {
 
       // Auto-migrate missing columns for existing PostgreSQL tables (e.g. Neon cloud database)
       try {
+        await poolInstance.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin BOOLEAN DEFAULT FALSE');
+        await poolInstance.query("UPDATE users SET is_admin = TRUE WHERE LOWER(email) IN ('admin@example.com', 'alice@example.com')");
         await poolInstance.query('ALTER TABLE messages ADD COLUMN IF NOT EXISTS is_edited BOOLEAN DEFAULT FALSE');
         await poolInstance.query('ALTER TABLE messages ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN DEFAULT FALSE');
         await poolInstance.query('ALTER TABLE messages ADD COLUMN IF NOT EXISTS receiver_id INTEGER REFERENCES users(id) ON DELETE CASCADE');
@@ -146,6 +148,14 @@ function initSqlite() {
   const seedPath = path.join(__dirname, '../db/seed.sql');
 
   try {
+    sqliteDb.exec('ALTER TABLE users ADD COLUMN is_admin INTEGER DEFAULT 0');
+  } catch (e) {}
+
+  try {
+    sqliteDb.exec("UPDATE users SET is_admin = 1 WHERE LOWER(email) IN ('admin@example.com', 'alice@example.com')");
+  } catch (e) {}
+
+  try {
     sqliteDb.exec('ALTER TABLE messages ADD COLUMN receiver_id INTEGER REFERENCES users(id)');
   } catch (e) {}
 
@@ -228,6 +238,8 @@ function parseJsonFields(row) {
   }
   if (typeof newRow.is_group === 'number') newRow.is_group = Boolean(newRow.is_group);
   if (typeof newRow.is_online === 'number') newRow.is_online = Boolean(newRow.is_online);
+  if (typeof newRow.is_admin === 'number') newRow.is_admin = Boolean(newRow.is_admin);
+  if (typeof newRow.is_admin === 'boolean') newRow.is_admin = Boolean(newRow.is_admin);
   return newRow;
 }
 

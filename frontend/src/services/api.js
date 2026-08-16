@@ -258,3 +258,41 @@ export async function deleteChat(chatId) {
   });
 }
 
+// ── Admin API ─────────────────────────────────────────────────────────────
+
+export async function fetchAdminStats() {
+  const data = await apiFetch('/admin/stats', { headers: getAuthHeaders() });
+  return data.stats;
+}
+
+export async function fetchAdminUsers() {
+  const data = await apiFetch('/admin/users', { headers: getAuthHeaders() });
+  return data.users || [];
+}
+
+export async function toggleAdminRole(userId) {
+  const data = await apiFetch(`/admin/users/${userId}/toggle-admin`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+  });
+  return data.user;
+}
+
+export async function fetchAdminConversations() {
+  const data = await apiFetch('/admin/conversations', { headers: getAuthHeaders() });
+  return data.conversations || [];
+}
+
+export async function fetchAdminConversationMessages(conversationId) {
+  const data = await apiFetch(`/admin/conversations/${conversationId}/messages`, {
+    headers: getAuthHeaders(),
+  });
+  return data.messages || [];
+}
+
+export async function fetchAdminActiveCalls() {
+  const data = await apiFetch('/admin/calls/active', { headers: getAuthHeaders() });
+  return data.activeCalls || [];
+}
+
+

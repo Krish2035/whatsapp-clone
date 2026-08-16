@@ -9,6 +9,7 @@ import CommunitiesView from '../components/CommunitiesView';
 import SettingsView from '../components/SettingsView';
 import MediaGalleryModal from '../components/MediaGalleryModal';
 import ProfileModal from '../components/ProfileModal';
+import AdminPanelModal from '../components/AdminPanelModal';
 import { fetchChats, markAsRead as apiMarkAsRead } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { socketService } from '../services/socket';
@@ -22,6 +23,7 @@ export default function Home() {
   // Modals
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isMediaGalleryOpen, setIsMediaGalleryOpen] = useState(false);
+  const [isAdminPanelOpen, setIsAdminPanelOpen] = useState(false);
 
   useEffect(() => {
     loadChats();
@@ -127,6 +129,7 @@ export default function Home() {
         onTabChange={handleTabChange}
         onOpenProfile={() => setIsProfileOpen(true)}
         onOpenMediaGallery={() => setIsMediaGalleryOpen(true)}
+        onOpenAdminPanel={() => setIsAdminPanelOpen(true)}
         isChatActive={!!activeChat}
       />
 
@@ -185,6 +188,12 @@ export default function Home() {
       <MediaGalleryModal
         isOpen={isMediaGalleryOpen}
         onClose={() => setIsMediaGalleryOpen(false)}
+      />
+
+      {/* Admin Control Center Modal */}
+      <AdminPanelModal
+        isOpen={isAdminPanelOpen}
+        onClose={() => setIsAdminPanelOpen(false)}
       />
     </div>
   );
