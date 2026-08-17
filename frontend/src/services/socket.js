@@ -2,7 +2,7 @@ import { io } from 'socket.io-client';
 import { getEnv } from '../utils/env';
 
 const getSocketUrl = () => {
-  const url = getEnv('VITE_SOCKET_URL') || getEnv('NEXT_PUBLIC_SOCKET_URL') || 'http://localhost:5000';
+  const url = getEnv('VITE_SOCKET_URL') || getEnv('NEXT_PUBLIC_SOCKET_URL') || 'https://whatsapp-backend.onrender.com';
   return url;
 };
 

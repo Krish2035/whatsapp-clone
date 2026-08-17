@@ -23,7 +23,7 @@ async function handleResponse(res) {
 }
 
 async function apiFetch(endpoint, options = {}) {
-  let baseUrl = getEnv('VITE_API_URL') || getEnv('NEXT_PUBLIC_API_URL') || 'http://localhost:5000/api';
+  let baseUrl = getEnv('VITE_API_URL') || getEnv('NEXT_PUBLIC_API_URL') || 'https://whatsapp-backend.onrender.com/api';
   if (!baseUrl.endsWith('/api') && baseUrl.startsWith('http')) {
     baseUrl = baseUrl.replace(/\/+$/, '') + '/api';
   }
@@ -149,7 +149,7 @@ export async function uploadMedia(file) {
   const headers = {};
   if (token) headers['Authorization'] = `Bearer ${token}`;
 
-  let baseUrl = getEnv('VITE_API_URL') || getEnv('NEXT_PUBLIC_API_URL') || 'http://localhost:5000/api';
+  let baseUrl = getEnv('VITE_API_URL') || getEnv('NEXT_PUBLIC_API_URL') || 'https://whatsapp-backend.onrender.com/api';
   if (!baseUrl.endsWith('/api') && baseUrl.startsWith('http')) {
     baseUrl = baseUrl.replace(/\/+$/, '') + '/api';
   }
