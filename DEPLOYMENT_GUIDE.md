@@ -2,7 +2,7 @@
 
 This guide provides complete, step-by-step instructions to deploy your **WhatsApp Web Clone** to production with:
 - **Frontend**: Deployed on **Vercel** (`https://whatsapp-clone-nu-lyart.vercel.app`)
-- **Backend**: Deployed on **Render** (`https://whatsapp-backend.onrender.com`)
+- **Backend**: Deployed on **Render** (`https://whatsapp-backend-ea92.onrender.com`)
 - **Database**: Deployed on **Neon PostgreSQL** (`neon.tech`)
 
 ---
