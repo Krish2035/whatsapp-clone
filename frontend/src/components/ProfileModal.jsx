@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { parseStatusMessage } from '../services/api';
 
 export default function ProfileModal({ isOpen, onClose }) {
   const { user, updateUserProfile } = useAuth();
-  const [statusMessage, setStatusMessage] = useState(user?.status_message || '');
+  const [statusMessage, setStatusMessage] = useState(parseStatusMessage(user?.status_message, ''));
   const [avatarUrl, setAvatarUrl] = useState(user?.avatar_url || '');
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState('');

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { searchUsers, createChat, clearChat as apiClearChat, deleteChat as apiDeleteChat } from '../services/api';
+import { searchUsers, createChat, clearChat as apiClearChat, deleteChat as apiDeleteChat, parseStatusMessage } from '../services/api';
 import ProfileModal from './ProfileModal';
 import NewChatModal from './NewChatModal';
 import { formatTimestamp } from '../utils/dateUtils';
@@ -456,7 +456,7 @@ export default function Sidebar({ chats = [], activeChatId, onSelectChat, onChat
                   </div>
                   <div>
                     <div style={{ color: '#e9edef', fontWeight: '500', fontSize: '15px' }}>{u.username}</div>
-                    <div style={{ color: '#8696a0', fontSize: '12px' }}>{u.status_message || u.email}</div>
+                    <div style={{ color: '#8696a0', fontSize: '12px' }}>{parseStatusMessage(u.status_message) || u.email}</div>
                   </div>
                 </div>
               ))

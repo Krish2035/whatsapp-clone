@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { updateProfile } from '../services/api';
+import { updateProfile, parseStatusMessage } from '../services/api';
 import KeyboardShortcutsModal from './KeyboardShortcutsModal';
 
 export default function SettingsView({ isMobile, onBack, onOpenMetaAi }) {
@@ -614,14 +614,14 @@ export default function SettingsView({ isMobile, onBack, onOpenMetaAi }) {
               </div>
             </div>
 
-            <div style={{ padding: '10px 12px' }}>
+            <div style={{ padding: '12px 16px' }}>
               <input
                 type="text"
                 placeholder="Search"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 style={{
-                  width: '100%', padding: '8px 14px', borderRadius: '8px',
+                  width: '100%', padding: '9px 16px', borderRadius: '8px',
                   border: 'none', backgroundColor: '#2a3942', color: '#e9edef',
                   fontSize: '14px', outline: 'none'
                 }}
@@ -630,21 +630,25 @@ export default function SettingsView({ isMobile, onBack, onOpenMetaAi }) {
 
             <div style={{
               display: 'flex', flexDirection: 'column', alignItems: 'center',
-              padding: '16px 0', borderBottom: '1px solid #222d34', position: 'relative'
+              padding: '20px 24px', borderBottom: '1px solid #222d34', position: 'relative'
             }}>
               <div style={{
-                backgroundColor: '#202c33', color: '#e9edef', borderRadius: '16px',
-                padding: '6px 14px', fontSize: '13px', marginBottom: '8px',
-                boxShadow: '0 2px 8px rgba(0,0,0,0.3)'
+                backgroundColor: '#202c33', color: '#e9edef', borderRadius: '20px',
+                padding: '8px 20px', fontSize: '13px', marginBottom: '14px',
+                maxWidth: '92%', textAlign: 'center', wordBreak: 'break-word',
+                border: '1px solid rgba(0, 168, 132, 0.3)',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.25)',
+                lineHeight: '1.4'
               }}>
-                {user?.status_message || 'Share a thought'}
+                {parseStatusMessage(user?.status_message)}
               </div>
 
               <div style={{
-                width: '72px', height: '72px', borderRadius: '50%',
+                width: '80px', height: '80px', borderRadius: '50%',
                 backgroundColor: '#00a884', display: 'flex', alignItems: 'center',
-                justifyContent: 'center', color: 'white', fontSize: '28px',
-                fontWeight: 'bold', overflow: 'hidden'
+                justifyContent: 'center', color: 'white', fontSize: '32px',
+                fontWeight: 'bold', overflow: 'hidden',
+                boxShadow: '0 4px 14px rgba(0,0,0,0.4)'
               }}>
                 {user?.avatar_url ? (
                   <img src={user.avatar_url} alt="Avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />

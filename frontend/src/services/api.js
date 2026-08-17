@@ -55,11 +55,39 @@ export async function fetchMe() {
   return data.user || data;
 }
 
+export function parseStatusMessage(msg, fallback = 'Share a thought') {
+  if (!msg) return fallback;
+  if (typeof msg === 'object' && msg !== null) {
+    return msg.status_message || fallback;
+  }
+  if (typeof msg === 'string') {
+    const trimmed = msg.trim();
+    if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (parsed && typeof parsed === 'object' && parsed.status_message) {
+          return parsed.status_message;
+        }
+      } catch (e) {}
+    }
+    return trimmed;
+  }
+  return String(msg);
+}
+
 export async function updateProfile(status_message, avatar_url) {
+  let status = status_message;
+  let avatar = avatar_url;
+
+  if (typeof status_message === 'object' && status_message !== null) {
+    status = status_message.status_message;
+    avatar = status_message.avatar_url;
+  }
+
   const data = await apiFetch('/users/profile', {
     method: 'PUT',
     headers: getAuthHeaders(),
-    body: JSON.stringify({ status_message, avatar_url }),
+    body: JSON.stringify({ status_message: status, avatar_url: avatar }),
   });
   return data.user || data;
 }
