@@ -1,6 +1,8 @@
 const http = require('http');
 require('dotenv').config();
 
+// WhatsApp Web Clone Production Server Entrypoint
+
 const app = require('./app');
 const { initSockets } = require('./sockets');
 const callService = require('./services/callService');
