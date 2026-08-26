@@ -59,9 +59,26 @@ const messageController = {
     try {
       const userId = req.user.id;
       const { messageId } = req.params;
+      const deleteType = req.query.type || req.body.type || 'everyone';
 
-      const message = await messageService.deleteMessage(messageId, userId);
-      res.json({ message });
+      if (deleteType === 'me' || deleteType === 'for_me') {
+        const result = await messageService.deleteMessageForMe(messageId, userId);
+        res.json({ success: true, mode: 'me', ...result });
+      } else {
+        const message = await messageService.deleteMessageForEveryone(messageId, userId);
+        res.json({ message, mode: 'everyone' });
+      }
+    } catch (err) {
+      res.status(400).json({ error: err.message });
+    }
+  },
+
+  async deleteMessageForMe(req, res) {
+    try {
+      const userId = req.user.id;
+      const { messageId } = req.params;
+      const result = await messageService.deleteMessageForMe(messageId, userId);
+      res.json({ success: true, mode: 'me', ...result });
     } catch (err) {
       res.status(400).json({ error: err.message });
     }

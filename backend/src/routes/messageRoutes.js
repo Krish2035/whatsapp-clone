@@ -9,6 +9,7 @@ router.get('/:conversationId', messageController.getMessages);
 router.post('/', messageController.sendMessage);
 router.put('/:messageId', messageController.editMessage);
 router.delete('/:messageId', messageController.deleteMessage);
+router.post('/:messageId/delete-for-me', messageController.deleteMessageForMe);
 router.post('/reaction', messageController.addReaction);
 router.post('/:messageId/reaction', messageController.addReaction);
 router.patch('/:messageId/delivered', messageController.markDelivered);

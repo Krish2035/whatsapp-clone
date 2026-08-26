@@ -52,6 +52,7 @@ async function ensurePgSchema(poolInstance) {
         await poolInstance.query("UPDATE users SET is_admin = TRUE WHERE LOWER(email) = 'admin@example.com'");
         await poolInstance.query('ALTER TABLE messages ADD COLUMN IF NOT EXISTS is_edited BOOLEAN DEFAULT FALSE');
         await poolInstance.query('ALTER TABLE messages ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN DEFAULT FALSE');
+        await poolInstance.query("ALTER TABLE messages ADD COLUMN IF NOT EXISTS deleted_for_user_ids TEXT DEFAULT '[]'");
         await poolInstance.query('ALTER TABLE messages ADD COLUMN IF NOT EXISTS receiver_id INTEGER REFERENCES users(id) ON DELETE CASCADE');
         await poolInstance.query('ALTER TABLE messages ADD COLUMN IF NOT EXISTS media_url TEXT DEFAULT NULL');
         await poolInstance.query("ALTER TABLE messages ADD COLUMN IF NOT EXISTS media_type VARCHAR(50) DEFAULT 'text'");
@@ -167,6 +168,10 @@ function initSqlite() {
 
   try {
     sqliteDb.exec('ALTER TABLE messages ADD COLUMN is_deleted INTEGER DEFAULT 0');
+  } catch (e) {}
+
+  try {
+    sqliteDb.exec("ALTER TABLE messages ADD COLUMN deleted_for_user_ids TEXT DEFAULT '[]'");
   } catch (e) {}
 
   try {

@@ -17,6 +17,12 @@ async function handleResponse(res) {
     throw new Error(`Server returned non-JSON response (${res.status})`);
   }
   if (!res.ok) {
+    const isUnauthorized = res.status === 401 || res.status === 403 || data.error === 'Invalid or expired token' || data.error === 'Access token required';
+    if (isUnauthorized && typeof window !== 'undefined') {
+      localStorage.removeItem('token');
+      sessionStorage.removeItem('token');
+      window.dispatchEvent(new CustomEvent('auth:unauthorized'));
+    }
     throw new Error(data.error || data.message || `Request failed (${res.status})`);
   }
   return data;
@@ -145,12 +151,27 @@ export async function editMessage(messageId, content) {
   return data.message || data;
 }
 
-export async function deleteMessage(messageId) {
-  const data = await apiFetch(`/messages/${messageId}`, {
+export async function deleteMessageForEveryone(messageId) {
+  const data = await apiFetch(`/messages/${messageId}?type=everyone`, {
     method: 'DELETE',
     headers: getAuthHeaders(),
   });
   return data.message || data;
+}
+
+export async function deleteMessageForMe(messageId) {
+  const data = await apiFetch(`/messages/${messageId}/delete-for-me`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+  });
+  return data;
+}
+
+export async function deleteMessage(messageId, type = 'everyone') {
+  if (type === 'me' || type === 'for_me') {
+    return deleteMessageForMe(messageId);
+  }
+  return deleteMessageForEveryone(messageId);
 }
 
 export async function addReaction(messageId, emoji) {

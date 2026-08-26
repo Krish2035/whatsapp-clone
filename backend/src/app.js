@@ -69,7 +69,10 @@ app.get('/api/health', async (req, res) => {
   }
 });
 
+const mediaController = require('./controllers/mediaController');
+
 // API Routes Setup
+app.get('/api/download', (req, res) => mediaController.downloadFile(req, res));
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/conversations', conversationRoutes);

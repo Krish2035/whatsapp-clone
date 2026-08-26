@@ -726,7 +726,7 @@ export default function Sidebar({ chats = [], activeChatId, onSelectChat, onChat
                           overflow: 'hidden',
                           textOverflow: 'ellipsis',
                           flex: 1,
-                          marginRight: '8px'
+                  marginRight: '8px'
                         }}>
                           {isLastMsgMine && (
                             <span style={{ marginRight: '4px', color: lastMsg?.status === 'read' ? '#53bdeb' : '#8696a0', fontWeight: 'bold' }}>
@@ -736,12 +736,35 @@ export default function Sidebar({ chats = [], activeChatId, onSelectChat, onChat
                           {(() => {
                             if (!lastMsg || (!lastMsg.id && !lastMsg.content && !lastMsg.media_url && !lastMsg.mediaUrl)) return 'No messages yet';
                             if (lastMsg.is_deleted || lastMsg.isDeleted) return '🚫 This message was deleted';
-                            const hasText = lastMsg.content && !lastMsg.content.startsWith('[file:') && !lastMsg.content.startsWith('[image:') && !lastMsg.content.startsWith('[video:') && !lastMsg.content.startsWith('[audio:');
+                            
+                            if (lastMsg.content && lastMsg.content.startsWith('[contact:')) {
+                              try {
+                                const c = JSON.parse(lastMsg.content.slice(9, -1));
+                                return `👤 Contact: ${c.username || 'Shared Contact'}`;
+                              } catch(e) { return '👤 Contact'; }
+                            }
+                            if (lastMsg.content && lastMsg.content.startsWith('[poll:')) {
+                              try {
+                                const p = JSON.parse(lastMsg.content.slice(6, -1));
+                                return `📊 Poll: ${p.question || 'Poll'}`;
+                              } catch(e) { return '📊 Poll'; }
+                            }
+                            if (lastMsg.content && lastMsg.content.startsWith('[event:')) {
+                              try {
+                                const ev = JSON.parse(lastMsg.content.slice(7, -1));
+                                return `📅 Event: ${ev.name || 'Event'}`;
+                              } catch(e) { return '📅 Event'; }
+                            }
+
+                            const hasText = lastMsg.content && !lastMsg.content.startsWith('[file:') && !lastMsg.content.startsWith('[image:') && !lastMsg.content.startsWith('[video:') && !lastMsg.content.startsWith('[audio:') && !lastMsg.content.startsWith('[contact:') && !lastMsg.content.startsWith('[poll:') && !lastMsg.content.startsWith('[event:');
                             if (hasText) return lastMsg.content;
+
                             const mType = lastMsg.media_type || lastMsg.type || 'text';
                             if (mType === 'image') return '📷 Photo';
                             if (mType === 'video') return '🎥 Video';
                             if (mType === 'audio') return '🎵 Voice message';
+                            if (mType === 'contact') return '👤 Contact';
+                            if (mType === 'poll') return '📊 Poll';
                             if (mType === 'document' || mType === 'file') return '📄 Document';
                             if (lastMsg.media_url || lastMsg.mediaUrl) return '📎 Attachment';
                             return lastMsg.content || 'No messages yet';

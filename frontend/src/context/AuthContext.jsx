@@ -8,6 +8,30 @@ export const AuthProvider = ({ children }) => {
   const [token, setToken] = useState(localStorage.getItem('token') || null);
   const [loading, setLoading] = useState(true);
 
+  const logout = () => {
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('token');
+      sessionStorage.removeItem('token');
+    }
+    setToken(null);
+    setUser(null);
+  };
+
+  useEffect(() => {
+    const handleUnauthorized = () => {
+      logout();
+    };
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('auth:unauthorized', handleUnauthorized);
+    }
+    return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('auth:unauthorized', handleUnauthorized);
+      }
+    };
+  }, []);
+
   useEffect(() => {
     const initAuth = async () => {
       if (token) {
@@ -15,7 +39,7 @@ export const AuthProvider = ({ children }) => {
           const userData = await fetchMe();
           setUser(userData);
         } catch (err) {
-          console.error('Session restoration failed:', err);
+          console.warn('Session restoration failed:', err?.message || err);
           logout();
         }
       }
@@ -38,12 +62,6 @@ export const AuthProvider = ({ children }) => {
     setToken(data.token);
     setUser(data.user);
     return data;
-  };
-
-  const logout = () => {
-    localStorage.removeItem('token');
-    setToken(null);
-    setUser(null);
   };
 
   const updateUserProfile = async (status_message, avatar_url) => {

@@ -31,6 +31,7 @@ export default function ContactInfoSidebar({ isOpen, onClose, activeChat, messag
 
   return (
     <div
+      className="wa-contact-info-sidebar"
       style={{
         width: '380px',
         height: '100%',

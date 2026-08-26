@@ -3,19 +3,25 @@ const pool = require('../config/db');
 exports.searchUsers = async (req, res, next) => {
   try {
     const { q } = req.query;
-    const currentUserId = req.user.id;
 
     if (!q || q.trim() === '') {
-      return res.json({ users: [] });
+      const result = await pool.query(
+        `SELECT id, username, email, avatar_url, status_message 
+         FROM users 
+         ORDER BY username ASC 
+         LIMIT 100`
+      );
+      return res.json({ users: result.rows });
     }
 
     const searchQuery = `%${q.trim()}%`;
     const result = await pool.query(
       `SELECT id, username, email, avatar_url, status_message 
        FROM users 
-       WHERE id != $1 AND (username ILIKE $2 OR email ILIKE $2)
-       LIMIT 20`,
-      [currentUserId, searchQuery]
+       WHERE username ILIKE $1 OR email ILIKE $1
+       ORDER BY username ASC 
+       LIMIT 50`,
+      [searchQuery]
     );
 
     res.json({ users: result.rows });

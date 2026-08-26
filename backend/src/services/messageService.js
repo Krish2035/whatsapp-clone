@@ -98,6 +98,7 @@ const messageService = {
         m.reply_to_id as "replyToId", 
         m.is_edited as "isEdited",
         m.is_deleted as "isDeleted",
+        m.deleted_for_user_ids as "deleted_for_user_ids",
         m.created_at as "createdAt", 
         m.updated_at as "updatedAt",
         json_build_object(
@@ -131,7 +132,17 @@ const messageService = {
       [numChatId, limit, offset]
     );
 
-    return result.rows;
+    // Filter out messages deleted for the requesting user specifically
+    return result.rows.filter((m) => {
+      if (!m.deleted_for_user_ids) return true;
+      try {
+        const list = typeof m.deleted_for_user_ids === 'string' ? JSON.parse(m.deleted_for_user_ids) : m.deleted_for_user_ids;
+        if (Array.isArray(list) && list.map(String).includes(String(numUserId))) {
+          return false;
+        }
+      } catch (e) {}
+      return true;
+    });
   },
 
   /**
@@ -156,9 +167,9 @@ const messageService = {
   },
 
   /**
-   * Delete message (soft delete for conversation participants)
+   * Delete message for everyone (replaces content with "This message was deleted")
    */
-  async deleteMessage(messageId, userId) {
+  async deleteMessageForEveryone(messageId, userId) {
     const numMsgId = parseInt(messageId, 10);
     const numUserId = parseInt(userId, 10);
 
@@ -184,6 +195,55 @@ const messageService = {
     );
 
     return result.rows[0];
+  },
+
+  /**
+   * Delete message for me (hides message for the current user only)
+   */
+  async deleteMessageForMe(messageId, userId) {
+    const numMsgId = parseInt(messageId, 10);
+    const numUserId = parseInt(userId, 10);
+
+    const msgCheck = await pool.query(
+      `SELECT m.id, m.chat_id, m.deleted_for_user_ids
+       FROM messages m
+       JOIN chat_participants cp ON m.chat_id = cp.chat_id AND cp.user_id = $2
+       WHERE m.id = $1`,
+      [numMsgId, numUserId]
+    );
+
+    if (msgCheck.rows.length === 0) {
+      throw new Error('Message not found or you are not a member of this conversation.');
+    }
+
+    let currentList = [];
+    try {
+      const raw = msgCheck.rows[0].deleted_for_user_ids;
+      currentList = typeof raw === 'string' ? JSON.parse(raw || '[]') : (raw || []);
+      if (!Array.isArray(currentList)) currentList = [];
+    } catch (e) {
+      currentList = [];
+    }
+
+    if (!currentList.map(String).includes(String(numUserId))) {
+      currentList.push(numUserId);
+    }
+
+    await pool.query(
+      `UPDATE messages
+       SET deleted_for_user_ids = $1, updated_at = CURRENT_TIMESTAMP
+       WHERE id = $2`,
+      [JSON.stringify(currentList), numMsgId]
+    );
+
+    return { id: numMsgId, conversationId: msgCheck.rows[0].chat_id, deletedForUserId: numUserId };
+  },
+
+  /**
+   * Alias for default deletion (delete for everyone)
+   */
+  async deleteMessage(messageId, userId) {
+    return this.deleteMessageForEveryone(messageId, userId);
   },
 
   /**

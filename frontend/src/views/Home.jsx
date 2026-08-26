@@ -147,6 +147,7 @@ export default function Home() {
             activeChat={activeChat} 
             onMessageSent={() => loadChats()} 
             onMessagesRead={handleMessagesRead}
+            onSelectChat={(selectChatId, targetUser) => loadChats(selectChatId, targetUser)}
             onBack={() => setActiveChat(null)}
           />
         </>
