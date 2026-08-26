@@ -20,42 +20,63 @@ exports.chatWithMetaAi = async (req, res) => {
       });
     }
 
-    // Call Groq API (OpenAI compatible endpoint)
-    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey.trim()}`
-      },
-      body: JSON.stringify({
-        model: 'llama-3.3-70b-versatile',
-        messages: [
-          {
-            role: 'system',
-            content: 'You are Meta AI, an intelligent, friendly, and helpful AI assistant inside WhatsApp Web. Always structure your answers cleanly with clear line breaks, bullet/numbered lists (1., 2., 3.), and bold category titles (**Title**) for optimal readability.'
-          },
-          {
-            role: 'user',
-            content: prompt
-          }
-        ],
-        temperature: 0.7,
-        max_tokens: 1024
-      })
-    });
+    // List of active models with fallback strategy
+    const candidateModels = ['groq/compound-mini', 'groq/compound', 'qwen/qwen3.6-27b'];
+    let lastError = null;
+    let replyText = null;
 
-    if (!response.ok) {
-      const errText = await response.text();
-      console.error('Groq API Error Response:', errText);
-      return res.json({
-        reply: `Meta AI couldn't connect to Groq API. Please verify your GROQ_API_KEY in backend/.env!`
-      });
+    for (const modelName of candidateModels) {
+      try {
+        const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey.trim()}`
+          },
+          body: JSON.stringify({
+            model: modelName,
+            messages: [
+              {
+                role: 'system',
+                content: 'You are Meta AI, an intelligent, friendly, and helpful AI assistant inside WhatsApp Web. Always structure your answers cleanly with clear line breaks, bullet/numbered lists (1., 2., 3.), and bold category titles (**Title**) for optimal readability.'
+              },
+              {
+                role: 'user',
+                content: prompt
+              }
+            ],
+            temperature: 0.7,
+            max_tokens: 1024
+          })
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          let content = data?.choices?.[0]?.message?.content || '';
+          // Strip internal thinking blocks if present (e.g. <think>...</think>)
+          content = content.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+          if (content) {
+            replyText = content;
+            break;
+          }
+        } else {
+          const errText = await response.text();
+          console.error(`Groq API Error (${modelName}):`, errText);
+          lastError = errText;
+        }
+      } catch (e) {
+        console.error(`Groq fetch error (${modelName}):`, e);
+        lastError = e.message;
+      }
     }
 
-    const data = await response.json();
-    const replyText = data?.choices?.[0]?.message?.content || "I couldn't generate a response. Please try again!";
+    if (replyText) {
+      return res.json({ reply: replyText });
+    }
 
-    return res.json({ reply: replyText });
+    return res.json({
+      reply: `Meta AI couldn't connect to Groq API (${lastError || 'Invalid API key or response'}). Please verify your GROQ_API_KEY in Render dashboard environment settings!`
+    });
   } catch (err) {
     console.error('Meta AI Controller Error:', err);
     return res.status(500).json({
