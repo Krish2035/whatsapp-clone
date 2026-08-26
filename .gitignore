@@ -21,6 +21,9 @@ frontend/.env.local
 npm-debug.log*
 
 # IDE & System Files
-.DS_Store
-.vscode/
-.idea/
+# Databases
+*.db
+*.db-journal
+backend/*.db
+backend/*.db-journal
+
