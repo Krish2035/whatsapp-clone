@@ -83,6 +83,40 @@ const conversationService = {
   },
 
   /**
+   * Create a new group conversation with group_name and multiple participants.
+   */
+  async createGroupConversation(creatorId, participantIds, groupName) {
+    const numCreatorId = parseInt(creatorId, 10);
+    const validParticipantIds = (Array.isArray(participantIds) ? participantIds : [participantIds])
+      .map((id) => parseInt(id, 10))
+      .filter((id) => !isNaN(id));
+
+    const allMemberIds = Array.from(new Set([numCreatorId, ...validParticipantIds]));
+
+    const newChatResult = await pool.query(
+      `INSERT INTO chats (is_group, group_name, created_at, updated_at)
+       VALUES (TRUE, $1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+       RETURNING id`,
+      [groupName || 'New Group']
+    );
+
+    const chatId = newChatResult.rows[0]?.id;
+    if (!chatId) {
+      throw new Error('Failed to create group conversation record');
+    }
+
+    // Insert all members into chat_participants
+    for (const memberId of allMemberIds) {
+      await pool.query(
+        'INSERT INTO chat_participants (chat_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+        [chatId, memberId]
+      );
+    }
+
+    return await this.getConversationById(chatId, numCreatorId);
+  },
+
+  /**
    * Get all conversations for a specific user with participants and last message.
    */
   async getUserConversations(userId) {

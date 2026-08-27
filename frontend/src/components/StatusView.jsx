@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { fetchStatuses } from '../services/api';
 import StatusComposer from './StatusComposer';
 import StatusStoryViewer from './StatusStoryViewer';
+import { socketService } from '../services/socket';
 
 // Default WhatsApp-style built-in status card shown to all users
 const DEFAULT_STATUS_GROUP = {
@@ -73,30 +74,162 @@ function StatusRing({ viewed, children, onClick, size = 50 }) {
   );
 }
 
+const getStoredMyGroup = (userId, userObj) => {
+  if (!userId) return null;
+  try {
+    const raw = localStorage.getItem(`wa_my_status_${userId}`);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    const now = Date.now();
+    const activeStatuses = (parsed.statuses || []).filter((s) => {
+      const createdTime = new Date(s.created_at).getTime();
+      return !isNaN(createdTime) && (now - createdTime < 24 * 60 * 60 * 1000);
+    });
+
+    if (activeStatuses.length === 0) {
+      localStorage.removeItem(`wa_my_status_${userId}`);
+      return null;
+    }
+
+    localStorage.setItem(`wa_my_status_${userId}`, JSON.stringify({ ...parsed, statuses: activeStatuses }));
+
+    return {
+      user_id: userId,
+      username: userObj?.username || parsed.username || 'You',
+      avatar_url: userObj?.avatar_url || parsed.avatar_url || null,
+      is_mine: true,
+      statuses: activeStatuses
+    };
+  } catch (e) {
+    return null;
+  }
+};
+
+const saveStoredMyGroup = (userId, groupData) => {
+  if (!userId) return;
+  if (!groupData || !groupData.statuses || groupData.statuses.length === 0) {
+    localStorage.removeItem(`wa_my_status_${userId}`);
+    return;
+  }
+  try {
+    const now = Date.now();
+    const activeStatuses = groupData.statuses.filter((s) => {
+      const createdTime = new Date(s.created_at).getTime();
+      return !isNaN(createdTime) && (now - createdTime < 24 * 60 * 60 * 1000);
+    });
+    if (activeStatuses.length === 0) {
+      localStorage.removeItem(`wa_my_status_${userId}`);
+    } else {
+      localStorage.setItem(
+        `wa_my_status_${userId}`,
+        JSON.stringify({
+          user_id: userId,
+          username: groupData.username,
+          avatar_url: groupData.avatar_url,
+          statuses: activeStatuses
+        })
+      );
+    }
+  } catch (e) {}
+};
+
 export default function StatusView({ isMobile, onBack }) {
   const { user } = useAuth();
   const [statusGroups, setStatusGroups] = useState([]);
   const [myGroup, setMyGroup] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showComposer, setShowComposer] = useState(false);
+  const [composerMode, setComposerMode] = useState('text');
+  const [pendingFiles, setPendingFiles] = useState(null);
+  const [isAddMenuOpen, setIsAddMenuOpen] = useState(false);
   const [viewerData, setViewerData] = useState(null); // { groups, initialGroupIdx }
+  const mediaInputRef = useRef(null);
+
+  const handleMediaFileChange = (e) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length > 0) {
+      setComposerMode('media');
+      setPendingFiles(files);
+      setShowComposer(true);
+    }
+    e.target.value = '';
+  };
 
   const loadStatuses = useCallback(async () => {
     setLoading(true);
     try {
+      const currentUserId = user?.id;
+      const currentUsername = user?.username;
+
+      const cachedMine = getStoredMyGroup(currentUserId, user);
+      if (cachedMine) {
+        setMyGroup(cachedMine);
+      }
+
       const groups = await fetchStatuses();
-      const mine = groups.find((g) => g.is_mine) || null;
-      const others = groups.filter((g) => !g.is_mine);
+
+      const mine = groups.find(
+        (g) => g.is_mine || (currentUserId && String(g.user_id) === String(currentUserId)) || (currentUsername && g.username.toLowerCase() === currentUsername.toLowerCase())
+      ) || cachedMine || null;
+
+      const others = groups.filter((g) => {
+        const isUserMine = g.is_mine || (currentUserId && String(g.user_id) === String(currentUserId)) || (currentUsername && g.username?.toLowerCase() === currentUsername?.toLowerCase());
+        return !isUserMine;
+      });
+
       setMyGroup(mine);
       setStatusGroups(others);
+      if (mine && currentUserId) {
+        saveStoredMyGroup(currentUserId, mine);
+      }
     } catch (e) {
       console.warn('Failed to load statuses:', e);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [user]);
+
+  const handleStatusCreated = async (createdRes) => {
+    const rawStatus = createdRes?.status || createdRes;
+    if (rawStatus) {
+      const updated = {
+        user_id: user?.id || 'my-id',
+        username: user?.username || 'You',
+        avatar_url: user?.avatar_url || null,
+        is_mine: true,
+        statuses: [rawStatus, ...(myGroup?.statuses || [])]
+      };
+      setMyGroup(updated);
+      if (user?.id) saveStoredMyGroup(user.id, updated);
+    }
+    await loadStatuses();
+  };
+
+  const handleStatusDeleted = async (deletedStatusId) => {
+    setMyGroup((prev) => {
+      if (!prev) return null;
+      const remaining = (prev.statuses || []).filter((s) => String(s.id) !== String(deletedStatusId));
+      const updated = remaining.length === 0 ? null : { ...prev, statuses: remaining };
+      if (user?.id) saveStoredMyGroup(user.id, updated);
+      return updated;
+    });
+    setViewerData(null);
+    await loadStatuses();
+  };
 
   useEffect(() => { loadStatuses(); }, [loadStatuses]);
+
+  useEffect(() => {
+    const socket = socketService.getSocket();
+    if (socket) {
+      socket.on('new_status', loadStatuses);
+      socket.on('status_deleted', loadStatuses);
+      return () => {
+        socket.off('new_status', loadStatuses);
+        socket.off('status_deleted', loadStatuses);
+      };
+    }
+  }, [loadStatuses]);
 
   const openViewer = (groups, idx) => {
     setViewerData({ groups, initialGroupIdx: idx });
@@ -134,8 +267,16 @@ export default function StatusView({ isMobile, onBack }) {
             )}
             <h2 style={{ color: '#e9edef', fontSize: '20px', fontWeight: '600', margin: 0 }}>Status</h2>
           </div>
-          <div style={{ display: 'flex', gap: '6px' }}>
-            <button onClick={() => setShowComposer(true)} title="Add Status" style={{
+          <div style={{ position: 'relative' }}>
+            <input
+              type="file"
+              ref={mediaInputRef}
+              onChange={handleMediaFileChange}
+              style={{ display: 'none' }}
+              accept="image/*,video/*"
+              multiple
+            />
+            <button onClick={() => setIsAddMenuOpen((prev) => !prev)} title="Add Status" style={{
               width: '38px', height: '38px', borderRadius: '50%', border: 'none',
               backgroundColor: '#00a884', color: '#fff', fontSize: '20px',
               cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -144,6 +285,72 @@ export default function StatusView({ isMobile, onBack }) {
             onMouseEnter={(e) => (e.currentTarget.style.transform = 'scale(1.1)')}
             onMouseLeave={(e) => (e.currentTarget.style.transform = 'scale(1)')}
             >+</button>
+
+            {/* Dropdown Popover Menu (Matches Screenshot 1) */}
+            {isAddMenuOpen && (
+              <div
+                style={{
+                  position: 'absolute',
+                  top: '46px',
+                  right: '0',
+                  width: '210px',
+                  backgroundColor: '#202c33',
+                  borderRadius: '12px',
+                  boxShadow: '0 8px 32px rgba(0,0,0,0.6)',
+                  border: '1px solid #2a3942',
+                  padding: '6px 0',
+                  zIndex: 100
+                }}
+              >
+                {/* 🖼️ Photos & videos */}
+                <div
+                  onClick={() => {
+                    setIsAddMenuOpen(false);
+                    mediaInputRef.current?.click();
+                  }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '14px',
+                    padding: '10px 18px',
+                    cursor: 'pointer',
+                    color: '#e9edef',
+                    fontSize: '14px',
+                    transition: 'background 0.15s'
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.06)')}
+                  onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                >
+                  <span style={{ fontSize: '18px' }}>🖼️</span>
+                  <span style={{ fontWeight: '500' }}>Photos & videos</span>
+                </div>
+
+                {/* ✏️ Text */}
+                <div
+                  onClick={() => {
+                    setIsAddMenuOpen(false);
+                    setComposerMode('text');
+                    setPendingFiles(null);
+                    setShowComposer(true);
+                  }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '14px',
+                    padding: '10px 18px',
+                    cursor: 'pointer',
+                    color: '#e9edef',
+                    fontSize: '14px',
+                    transition: 'background 0.15s'
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.06)')}
+                  onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                >
+                  <span style={{ fontSize: '18px' }}>✏️</span>
+                  <span style={{ fontWeight: '500' }}>Text</span>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -152,15 +359,26 @@ export default function StatusView({ isMobile, onBack }) {
           {/* ── My Status ── */}
           <div style={{ padding: '10px 16px 4px', cursor: 'pointer' }}
             onClick={() => {
-              if (myGroup) openViewer(allGroupsForViewer, 0);
+              if (myGroup && myGroup.statuses?.length > 0) openViewer(allGroupsForViewer, 0);
               else setShowComposer(true);
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: '14px', padding: '8px 0' }}>
               <div style={{ position: 'relative' }}>
-                {myGroup ? (
+                {myGroup && myGroup.statuses?.length > 0 ? (
                   <StatusRing viewed={false}>
-                    {user?.avatar_url ? (
+                    {myGroup.statuses[0]?.media_url ? (
+                      <img src={myGroup.statuses[0].media_url} alt="My status" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    ) : myGroup.statuses[0]?.media_type === 'text' ? (
+                      <div style={{
+                        width: '100%', height: '100%',
+                        backgroundColor: myGroup.statuses[0].bg_color || '#128c7e',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        color: '#fff', fontSize: '9px', fontWeight: 700, padding: '2px', textAlign: 'center'
+                      }}>
+                        {myGroup.statuses[0].caption?.slice(0, 5) || 'Text'}
+                      </div>
+                    ) : user?.avatar_url ? (
                       <img src={user.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                     ) : user?.username?.[0]?.toUpperCase() || 'U'}
                   </StatusRing>
@@ -175,18 +393,20 @@ export default function StatusView({ isMobile, onBack }) {
                     ) : user?.username?.[0]?.toUpperCase() || 'U'}
                   </div>
                 )}
-                <div style={{
-                  position: 'absolute', bottom: '0', right: '0',
-                  backgroundColor: '#00a884', color: 'white', borderRadius: '50%',
-                  width: '20px', height: '20px', display: 'flex', alignItems: 'center',
-                  justifyContent: 'center', fontSize: '13px', border: '2.5px solid #111b21',
-                  fontWeight: 700,
-                }}>+</div>
+                {(!myGroup || !myGroup.statuses?.length) && (
+                  <div style={{
+                    position: 'absolute', bottom: '0', right: '0',
+                    backgroundColor: '#00a884', color: 'white', borderRadius: '50%',
+                    width: '20px', height: '20px', display: 'flex', alignItems: 'center',
+                    justifyContent: 'center', fontSize: '13px', border: '2.5px solid #111b21',
+                    fontWeight: 700,
+                  }}>+</div>
+                )}
               </div>
               <div>
                 <div style={{ color: '#e9edef', fontWeight: 600, fontSize: '15px' }}>My status</div>
                 <div style={{ color: '#8696a0', fontSize: '13px', marginTop: '2px' }}>
-                  {myGroup
+                  {myGroup && myGroup.statuses?.length > 0
                     ? `${myGroup.statuses.length} update${myGroup.statuses.length > 1 ? 's' : ''} • ${timeAgo(myGroup.statuses[0].created_at)}`
                     : 'Click to add status update'}
                 </div>
@@ -226,7 +446,18 @@ export default function StatusView({ isMobile, onBack }) {
                   onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
                 >
                   <StatusRing viewed={false}>
-                    {g.avatar_url ? (
+                    {g.statuses?.[0]?.media_url ? (
+                      <img src={g.statuses[0].media_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    ) : g.statuses?.[0]?.media_type === 'text' ? (
+                      <div style={{
+                        width: '100%', height: '100%',
+                        backgroundColor: g.statuses[0].bg_color || '#128c7e',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        color: '#fff', fontSize: '9px', fontWeight: 700, padding: '2px', textAlign: 'center'
+                      }}>
+                        {g.statuses[0].caption?.slice(0, 5) || 'Text'}
+                      </div>
+                    ) : g.avatar_url ? (
                       <img src={g.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                     ) : g.username?.[0]?.toUpperCase()}
                   </StatusRing>
@@ -329,8 +560,13 @@ export default function StatusView({ isMobile, onBack }) {
       {/* Modals */}
       {showComposer && (
         <StatusComposer
-          onClose={() => setShowComposer(false)}
-          onCreated={loadStatuses}
+          initialMode={composerMode}
+          initialFiles={pendingFiles}
+          onClose={() => {
+            setShowComposer(false);
+            setPendingFiles(null);
+          }}
+          onCreated={handleStatusCreated}
         />
       )}
       {viewerData && (
@@ -338,7 +574,7 @@ export default function StatusView({ isMobile, onBack }) {
           groups={viewerData.groups}
           initialGroupIdx={viewerData.initialGroupIdx}
           onClose={() => setViewerData(null)}
-          onDeleteStatus={() => { setViewerData(null); loadStatuses(); }}
+          onDeleteStatus={handleStatusDeleted}
         />
       )}
     </div>

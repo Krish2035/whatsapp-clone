@@ -39,19 +39,21 @@ export default function NewChatModal({ isOpen, onClose, onChatCreated }) {
 
   const handleStartDirectChat = async (user) => {
     setLoading(true);
+    setError('');
     try {
       const res = await createChat([user.id], false);
-      onChatCreated(res.chat_id || res.chat.id);
+      const chatId = res?.id || res?.chat_id || res?.chat?.id || res?.conversation?.id;
+      if (onChatCreated) onChatCreated(chatId, user);
       onClose();
     } catch (err) {
-      setError(err.message);
+      setError(err.message || 'Failed to start chat');
     } finally {
       setLoading(false);
     }
   };
 
   const handleCreateGroup = async (e) => {
-    e.preventDefault();
+    if (e) e.preventDefault();
     if (!groupName.trim()) {
       setError('Group name is required');
       return;
@@ -62,12 +64,15 @@ export default function NewChatModal({ isOpen, onClose, onChatCreated }) {
     }
 
     setLoading(true);
+    setError('');
     try {
-      const res = await createChat(selectedUserIds, true, groupName);
-      onChatCreated(res.chat.id);
+      const res = await createChat(selectedUserIds, true, groupName.trim());
+      const chatId = res?.id || res?.chat_id || res?.chat?.id || res?.conversation?.id;
+      if (onChatCreated) onChatCreated(chatId, res);
       onClose();
     } catch (err) {
-      setError(err.message);
+      console.error('Create group failed:', err);
+      setError(err.message || 'Failed to create group');
     } finally {
       setLoading(false);
     }

@@ -14,16 +14,25 @@ const conversationController = {
   async createConversation(req, res) {
     try {
       const senderId = req.user.id;
-      const { receiverId, participantId } = req.body;
-      const targetUserId = receiverId || participantId;
+      const { receiverId, participantId, participant_ids, is_group, isGroup, group_name, groupName } = req.body;
 
-      if (!targetUserId) {
-        return res.status(400).json({ error: 'receiverId or participantId is required' });
+      let conversation;
+      if (is_group || isGroup) {
+        const pIds = participant_ids || (receiverId ? [receiverId] : []);
+        const gName = group_name || groupName || 'New Group';
+        conversation = await conversationService.createGroupConversation(senderId, pIds, gName);
+      } else {
+        const targetUserId = receiverId || participantId || (Array.isArray(participant_ids) ? participant_ids[0] : null);
+        if (!targetUserId) {
+          return res.status(400).json({ error: 'receiverId, participantId, or participant_ids is required' });
+        }
+        conversation = await conversationService.findOrCreateOneToOneConversation(senderId, targetUserId);
       }
 
-      const conversation = await conversationService.findOrCreateOneToOneConversation(senderId, targetUserId);
-      res.status(201).json({ conversation, chat: conversation });
+      const chatId = conversation.id;
+      res.status(201).json({ conversation, chat: conversation, chat_id: chatId, id: chatId });
     } catch (err) {
+      console.error('createConversation error:', err);
       res.status(400).json({ error: err.message });
     }
   },

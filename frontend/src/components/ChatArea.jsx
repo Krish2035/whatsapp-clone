@@ -19,6 +19,7 @@ import {
 } from '../services/api';
 import { socketService } from '../services/socket';
 import ContactInfoSidebar from './ContactInfoSidebar';
+import MediaPreviewModal from './MediaPreviewModal';
 import { formatTimestamp } from '../utils/dateUtils';
 import { getEnv } from '../utils/env';
 
@@ -63,6 +64,10 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
   const mediaInputRef = useRef(null);
   const audioInputRef = useRef(null);
   const stickerInputRef = useRef(null);
+
+  // Media Preview Modal & Drag-and-Drop States
+  const [pendingMediaFiles, setPendingMediaFiles] = useState(null);
+  const [isDraggingOver, setIsDraggingOver] = useState(false);
 
   // Camera Live Feed & Snapshot States
   const [isCameraOpen, setIsCameraOpen] = useState(false);
@@ -629,13 +634,16 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
     }, 2000);
   };
 
-  const handleSend = async (e, mediaUrl = null, mediaType = null, originalName = null) => {
+  const handleSend = async (e, mediaUrl = null, mediaType = null, originalName = null, overrideContent = null) => {
     if (e) e.preventDefault();
-    if ((!inputText.trim() && !mediaUrl) || !activeChat) return;
 
-    const content = inputText.trim();
+    const content = overrideContent !== null ? overrideContent.trim() : inputText.trim();
+    if ((!content && !mediaUrl) || !activeChat) return;
+
     const replyTarget = replyingTo;
-    setInputText('');
+    if (overrideContent === null) {
+      setInputText('');
+    }
     setReplyingTo(null);
 
 
@@ -857,6 +865,60 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
       alert('Upload failed: ' + (err.message || 'Unknown error'));
     } finally {
       setUploading(false);
+    }
+  };
+
+  const handleMediaSelect = (e) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length > 0) {
+      setPendingMediaFiles(files);
+    }
+    e.target.value = '';
+  };
+
+  const handleSendMediaBatch = async (mediaItems) => {
+    if (!mediaItems || mediaItems.length === 0 || uploading) return;
+    setUploading(true);
+    try {
+      for (const item of mediaItems) {
+        const uploaded = await uploadMedia(item.file);
+        const mediaUrl = uploaded.mediaUrl || uploaded.url;
+        const mediaType = uploaded.mediaType || uploaded.type;
+        const originalName = uploaded.originalName || item.file.name;
+
+        await handleSend(null, mediaUrl, mediaType, originalName, item.caption || '');
+      }
+      setPendingMediaFiles(null);
+    } catch (err) {
+      console.error('Failed to send media batch:', err);
+      alert('Upload failed: ' + (err.message || 'Unknown error'));
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!isDraggingOver) setIsDraggingOver(true);
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!e.currentTarget.contains(e.relatedTarget)) {
+      setIsDraggingOver(false);
+    }
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDraggingOver(false);
+
+    const droppedFiles = Array.from(e.dataTransfer.files || []);
+    if (droppedFiles.length > 0) {
+      setPendingMediaFiles(droppedFiles);
     }
   };
 
@@ -1173,6 +1235,9 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
     <div style={{ flex: 1, display: 'flex', width: '100%', height: '100%', overflow: 'hidden' }}>
       <div 
         className="wa-chat-container"
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
         style={{
           flex: 1, display: 'flex', flexDirection: 'column',
           height: '100%', backgroundColor: 'var(--wa-bg-app)', position: 'relative'
@@ -1185,7 +1250,7 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
             height: '60px', backgroundColor: 'var(--wa-bg-header)',
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
             padding: '0 16px', borderBottom: '1px solid var(--wa-border)',
-            flexShrink: 0, zIndex: 10
+            flexShrink: 0, zIndex: 1600
           }}
         >
           {/* Left Title & Avatar */}
@@ -2397,9 +2462,10 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
         <input
           type="file"
           ref={mediaInputRef}
-          onChange={handleFileUpload}
+          onChange={handleMediaSelect}
           style={{ display: 'none' }}
           accept="image/*,video/*"
+          multiple
         />
         <input
           type="file"
@@ -2457,6 +2523,59 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
             <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
           </svg>
         </button>
+        {/* Drag & Drop Visual Overlay */}
+        {isDraggingOver && (
+          <div
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: 'rgba(11, 20, 26, 0.92)',
+              zIndex: 1400,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              border: '3px dashed #00a884',
+              borderRadius: '8px',
+              margin: '12px',
+              gap: '16px',
+              pointerEvents: 'none'
+            }}
+          >
+            <div
+              style={{
+                width: '72px',
+                height: '72px',
+                borderRadius: '50%',
+                backgroundColor: '#00a884',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '32px',
+                color: 'white',
+                boxShadow: '0 4px 20px rgba(0, 168, 132, 0.4)'
+              }}
+            >
+              📁
+            </div>
+            <div style={{ color: '#e9edef', fontSize: '20px', fontWeight: '500' }}>
+              Drop files here to send
+            </div>
+          </div>
+        )}
+
+        {/* WhatsApp Media Preview Modal (Before Sending Photos/Videos) */}
+        {pendingMediaFiles && pendingMediaFiles.length > 0 && (
+          <MediaPreviewModal
+            initialFiles={pendingMediaFiles}
+            onClose={() => setPendingMediaFiles(null)}
+            onSend={handleSendMediaBatch}
+            uploading={uploading}
+          />
+        )}
       </form>
     </div>
 

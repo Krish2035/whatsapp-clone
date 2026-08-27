@@ -20,6 +20,7 @@ export default function StatusStoryViewer({ groups, initialGroupIdx = 0, onClose
   const [viewers, setViewers] = useState([]);
   const [replyText, setReplyText] = useState('');
   const [isMuted, setIsMuted] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const intervalRef = useRef(null);
   const progressRef = useRef(0);
@@ -43,7 +44,12 @@ export default function StatusStoryViewer({ groups, initialGroupIdx = 0, onClose
 
   const currentGroup = groups[groupIdx];
   const currentStatus = currentGroup?.statuses?.[statusIdx];
-  const isOwnStatus = currentGroup && String(currentGroup.user_id) === String(user?.id);
+  const isOwnStatus = currentGroup && (
+    currentGroup.is_mine ||
+    (user?.id && String(currentGroup.user_id) === String(user.id)) ||
+    (user?.username && currentGroup.username === user.username)
+  );
+
   const duration = currentStatus?.duration_ms || 5000;
   const tickMs = 50;
 
@@ -85,7 +91,7 @@ export default function StatusStoryViewer({ groups, initialGroupIdx = 0, onClose
   }, [progress]);
 
   useEffect(() => {
-    if (paused || showEmojiPicker || showViewers) return;
+    if (paused || showEmojiPicker || showViewers || showDeleteConfirm) return;
     setProgress(0);
     progressRef.current = 0;
 
@@ -100,7 +106,7 @@ export default function StatusStoryViewer({ groups, initialGroupIdx = 0, onClose
     }, tickMs);
 
     return () => clearInterval(intervalRef.current);
-  }, [currentStatus?.id, paused, showEmojiPicker, showViewers, goNext, duration]);
+  }, [currentStatus?.id, paused, showEmojiPicker, showViewers, showDeleteConfirm, goNext, duration]);
 
   // Load viewers
   const handleShowViewers = async () => {
@@ -122,14 +128,29 @@ export default function StatusStoryViewer({ groups, initialGroupIdx = 0, onClose
     } catch (e) {}
   };
 
-  const handleDelete = async () => {
-    if (!currentStatus || !isOwnStatus) return;
-    if (!window.confirm('Delete this status?')) return;
+  const handleDeleteClick = () => {
+    setPaused(true);
+    setShowDeleteConfirm(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    setShowDeleteConfirm(false);
+    if (!currentStatus) return;
     try {
       await deleteStatus(currentStatus.id);
-      onDeleteStatus?.();
-      goNext();
-    } catch (e) {}
+      if (onDeleteStatus) {
+        onDeleteStatus(currentStatus.id);
+      } else {
+        goNext();
+      }
+    } catch (e) {
+      console.error('Delete status failed:', e);
+    }
+  };
+
+  const handleCancelDelete = () => {
+    setShowDeleteConfirm(false);
+    setPaused(false);
   };
 
   if (!currentGroup || !currentStatus) return null;
@@ -204,7 +225,7 @@ export default function StatusStoryViewer({ groups, initialGroupIdx = 0, onClose
           }}>{paused ? '▶' : '⏸'}</button>
           {/* More menu: delete for own */}
           {isOwnStatus && (
-            <button onClick={handleDelete} style={{
+            <button onClick={handleDeleteClick} style={{
               background: 'rgba(0,0,0,0.4)', border: 'none', color: '#fff',
               width: '36px', height: '36px', borderRadius: '50%', cursor: 'pointer', fontSize: '16px',
             }}>🗑</button>
@@ -287,28 +308,65 @@ export default function StatusStoryViewer({ groups, initialGroupIdx = 0, onClose
               </button>
             </div>
           ) : (
-            // Others' status: reply + emoji react
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            // Others' status: reply input with emoji, sticker, and send button (Screenshot 4)
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', width: '100%' }}>
+              <button
+                onClick={() => { setShowEmojiPicker((p) => !p); setPaused(true); }}
+                style={{
+                  background: 'none', border: 'none', color: '#e9edef',
+                  fontSize: '20px', cursor: 'pointer', padding: '4px'
+                }}
+                title="Emoji"
+              >
+                😀
+              </button>
+              <button
+                onClick={() => { setShowEmojiPicker((p) => !p); setPaused(true); }}
+                style={{
+                  background: 'none', border: 'none', color: '#e9edef',
+                  fontSize: '20px', cursor: 'pointer', padding: '4px'
+                }}
+                title="Sticker"
+              >
+                🏷️
+              </button>
               <div style={{ flex: 1, position: 'relative' }}>
                 <input
                   value={replyText}
                   onChange={(e) => setReplyText(e.target.value)}
-                  placeholder="Reply to status..."
+                  placeholder="Type a reply..."
                   style={{
-                    width: '100%', backgroundColor: 'rgba(255,255,255,0.1)',
+                    width: '100%', backgroundColor: 'rgba(255,255,255,0.12)',
                     border: '1px solid rgba(255,255,255,0.2)', borderRadius: '24px',
-                    padding: '10px 16px', color: '#fff', fontSize: '14px', outline: 'none',
+                    padding: '10px 18px', color: '#fff', fontSize: '14px', outline: 'none',
                     boxSizing: 'border-box', backdropFilter: 'blur(4px)',
                   }}
                   onFocus={() => setPaused(true)}
                   onBlur={() => setPaused(false)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && replyText.trim()) {
+                      setReplyText('');
+                      setPaused(false);
+                    }
+                  }}
                 />
               </div>
-              <button onClick={() => { setShowEmojiPicker((p) => !p); setPaused(true); }} style={{
-                width: '44px', height: '44px', borderRadius: '50%', border: 'none',
-                backgroundColor: 'rgba(255,255,255,0.12)', color: '#fff', fontSize: '20px',
-                cursor: 'pointer',
-              }}>😊</button>
+              <button
+                onClick={() => {
+                  if (replyText.trim()) {
+                    setReplyText('');
+                    setPaused(false);
+                  }
+                }}
+                style={{
+                  background: 'none', border: 'none', color: '#00a884',
+                  fontSize: '20px', cursor: 'pointer', padding: '4px 6px',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center'
+                }}
+                title="Send reply"
+              >
+                ➤
+              </button>
             </div>
           )}
         </div>
@@ -404,6 +462,70 @@ export default function StatusStoryViewer({ groups, initialGroupIdx = 0, onClose
           width: '44px', height: '44px', borderRadius: '50%', cursor: 'pointer', fontSize: '20px',
           backdropFilter: 'blur(4px)',
         }}>→</button>
+      )}
+
+      {/* ── Delete Status Confirmation Modal ── */}
+      {showDeleteConfirm && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 100010,
+          backgroundColor: 'rgba(0, 0, 0, 0.75)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          backdropFilter: 'blur(4px)',
+        }}>
+          <div style={{
+            backgroundColor: '#111b21',
+            borderRadius: '16px',
+            padding: '24px 28px',
+            width: '90%',
+            maxWidth: '380px',
+            boxShadow: '0 20px 50px rgba(0,0,0,0.85)',
+            border: '1px solid #222d34',
+            textAlign: 'center',
+          }}>
+            <div style={{
+              width: '52px', height: '52px', borderRadius: '50%',
+              backgroundColor: 'rgba(239, 68, 68, 0.15)',
+              color: '#ef4444', display: 'flex', alignItems: 'center',
+              justifyContent: 'center', margin: '0 auto 16px', fontSize: '24px'
+            }}>
+              🗑️
+            </div>
+            <h3 style={{ color: '#e9edef', fontSize: '18px', fontWeight: 600, marginBottom: '10px' }}>
+              Delete status update?
+            </h3>
+            <p style={{ color: '#8696a0', fontSize: '14px', lineHeight: '1.4', marginBottom: '24px' }}>
+              Are you sure you want to delete this status update?
+            </p>
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
+              <button
+                onClick={handleCancelDelete}
+                style={{
+                  flex: 1, padding: '10px 18px', borderRadius: '24px',
+                  border: '1px solid #3b4a54', backgroundColor: 'transparent',
+                  color: '#00a884', fontSize: '14px', fontWeight: 600,
+                  cursor: 'pointer', transition: 'all 0.2s'
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.06)')}
+                onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+              >
+                No
+              </button>
+              <button
+                onClick={handleConfirmDelete}
+                style={{
+                  flex: 1, padding: '10px 18px', borderRadius: '24px',
+                  border: 'none', backgroundColor: '#ea4335',
+                  color: '#ffffff', fontSize: '14px', fontWeight: 600,
+                  cursor: 'pointer', transition: 'all 0.2s'
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#d93025')}
+                onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#ea4335')}
+              >
+                Yes
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

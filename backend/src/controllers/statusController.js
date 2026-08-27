@@ -6,19 +6,18 @@ const getStatuses = async (req, res) => {
     const userId = req.user.id;
 
     // Fetch all active statuses (not expired, within 24h) for all users
-    const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
     const result = await pool.query(
       `SELECT 
-        s.id, s.user_id, s.media_url, s.media_type, s.caption, s.bg_color, s.duration_ms, s.created_at,
+        s.id, s.user_id, s.media_url, s.media_type, s.caption, s.bg_color, s.duration_ms, s.created_at, s.expires_at,
         u.username, u.avatar_url,
         (SELECT COUNT(*) FROM status_views sv WHERE sv.status_id = s.id) as view_count,
-        (SELECT COUNT(*) FROM status_views sv WHERE sv.status_id = s.id AND sv.viewer_id = $2) as viewed_by_me,
-        (SELECT emoji FROM status_reactions sr WHERE sr.status_id = s.id AND sr.user_id = $2 LIMIT 1) as my_reaction
+        (SELECT COUNT(*) FROM status_views sv WHERE sv.status_id = s.id AND sv.viewer_id = $1) as viewed_by_me,
+        (SELECT emoji FROM status_reactions sr WHERE sr.status_id = s.id AND sr.user_id = $1 LIMIT 1) as my_reaction
       FROM statuses s
       JOIN users u ON s.user_id = u.id
-      WHERE s.created_at > $3
+      WHERE s.created_at >= CURRENT_TIMESTAMP - INTERVAL '24 hours' OR s.expires_at > CURRENT_TIMESTAMP
       ORDER BY s.created_at DESC`,
-      [userId, userId, cutoff]
+      [userId]
     );
 
     // Group by user
@@ -75,7 +74,7 @@ const createStatus = async (req, res) => {
 
     const result = await pool.query(
       `INSERT INTO statuses (user_id, media_url, media_type, caption, bg_color, duration_ms, expires_at, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP + INTERVAL '24 hours', CURRENT_TIMESTAMP)
        RETURNING *`,
       [
         userId,
@@ -84,12 +83,16 @@ const createStatus = async (req, res) => {
         caption || '',
         bg_color || '#075e54',
         duration_ms || 5000,
-        new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-        new Date().toISOString(),
       ]
     );
 
-    res.status(201).json({ status: result.rows[0] });
+    const newStatus = result.rows[0];
+
+    if (req.io) {
+      req.io.emit('new_status', { userId, status: newStatus });
+    }
+
+    res.status(201).json({ status: newStatus });
   } catch (err) {
     console.error('createStatus error:', err);
     res.status(500).json({ error: err.message });
@@ -102,7 +105,15 @@ const deleteStatus = async (req, res) => {
     const userId = req.user.id;
     const { id } = req.params;
 
-    await pool.query('DELETE FROM statuses WHERE id = $1 AND user_id = $2', [id, userId]);
+    const numId = parseInt(id, 10);
+    const numUserId = parseInt(userId, 10);
+
+    await pool.query('DELETE FROM statuses WHERE id = $1 AND user_id = $2', [numId, numUserId]);
+
+    if (req.io) {
+      req.io.emit('status_deleted', { statusId: numId, userId: numUserId });
+    }
+
     res.json({ success: true });
   } catch (err) {
     console.error('deleteStatus error:', err);
