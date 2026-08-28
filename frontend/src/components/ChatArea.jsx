@@ -2115,11 +2115,11 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
             left: '16px',
             backgroundColor: '#233138',
             borderRadius: '16px',
-            padding: '8px 0',
+            padding: '6px 0',
             boxShadow: '0 8px 32px rgba(0,0,0,0.6)',
             border: '1px solid #2a3942',
             zIndex: 1000,
-            width: '210px',
+            width: '200px',
             display: 'flex',
             flexDirection: 'column'
           }}
@@ -2131,16 +2131,16 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
               docInputRef.current?.click();
             }}
             style={{
-              display: 'flex', alignItems: 'center', gap: '14px',
-              padding: '10px 18px', cursor: 'pointer', color: '#e9edef',
+              display: 'flex', alignItems: 'center', gap: '12px',
+              padding: '6px 16px', cursor: 'pointer', color: '#e9edef',
               fontSize: '14px', transition: 'background 0.15s'
             }}
             className="wa-sidebar-item"
           >
             <div style={{
-              width: '32px', height: '32px', borderRadius: '50%',
+              width: '28px', height: '28px', borderRadius: '50%',
               backgroundColor: '#7f66ff', display: 'flex', alignItems: 'center',
-              justifyContent: 'center', fontSize: '16px'
+              justifyContent: 'center', fontSize: '14px'
             }}>
               📄
             </div>
@@ -2154,16 +2154,16 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
               mediaInputRef.current?.click();
             }}
             style={{
-              display: 'flex', alignItems: 'center', gap: '14px',
-              padding: '10px 18px', cursor: 'pointer', color: '#e9edef',
+              display: 'flex', alignItems: 'center', gap: '12px',
+              padding: '6px 16px', cursor: 'pointer', color: '#e9edef',
               fontSize: '14px', transition: 'background 0.15s'
             }}
             className="wa-sidebar-item"
           >
             <div style={{
-              width: '32px', height: '32px', borderRadius: '50%',
+              width: '28px', height: '28px', borderRadius: '50%',
               backgroundColor: '#007bfc', display: 'flex', alignItems: 'center',
-              justifyContent: 'center', fontSize: '16px'
+              justifyContent: 'center', fontSize: '14px'
             }}>
               🖼️
             </div>
@@ -2174,16 +2174,16 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
           <div
             onClick={startCamera}
             style={{
-              display: 'flex', alignItems: 'center', gap: '14px',
-              padding: '10px 18px', cursor: 'pointer', color: '#e9edef',
+              display: 'flex', alignItems: 'center', gap: '12px',
+              padding: '6px 16px', cursor: 'pointer', color: '#e9edef',
               fontSize: '14px', transition: 'background 0.15s'
             }}
             className="wa-sidebar-item"
           >
             <div style={{
-              width: '32px', height: '32px', borderRadius: '50%',
+              width: '28px', height: '28px', borderRadius: '50%',
               backgroundColor: '#ff2e74', display: 'flex', alignItems: 'center',
-              justifyContent: 'center', fontSize: '16px'
+              justifyContent: 'center', fontSize: '14px'
             }}>
               📷
             </div>
@@ -2197,16 +2197,16 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
               audioInputRef.current?.click();
             }}
             style={{
-              display: 'flex', alignItems: 'center', gap: '14px',
-              padding: '10px 18px', cursor: 'pointer', color: '#e9edef',
+              display: 'flex', alignItems: 'center', gap: '12px',
+              padding: '6px 16px', cursor: 'pointer', color: '#e9edef',
               fontSize: '14px', transition: 'background 0.15s'
             }}
             className="wa-sidebar-item"
           >
             <div style={{
-              width: '32px', height: '32px', borderRadius: '50%',
+              width: '28px', height: '28px', borderRadius: '50%',
               backgroundColor: '#e6683c', display: 'flex', alignItems: 'center',
-              justifyContent: 'center', fontSize: '16px'
+              justifyContent: 'center', fontSize: '14px'
             }}>
               🎵
             </div>
@@ -2217,16 +2217,16 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
           <div
             onClick={handleOpenContactModal}
             style={{
-              display: 'flex', alignItems: 'center', gap: '14px',
-              padding: '10px 18px', cursor: 'pointer', color: '#e9edef',
+              display: 'flex', alignItems: 'center', gap: '12px',
+              padding: '6px 16px', cursor: 'pointer', color: '#e9edef',
               fontSize: '14px', transition: 'background 0.15s'
             }}
             className="wa-sidebar-item"
           >
             <div style={{
-              width: '32px', height: '32px', borderRadius: '50%',
+              width: '28px', height: '28px', borderRadius: '50%',
               backgroundColor: '#00a884', display: 'flex', alignItems: 'center',
-              justifyContent: 'center', fontSize: '16px'
+              justifyContent: 'center', fontSize: '14px'
             }}>
               👤
             </div>
@@ -2237,16 +2237,16 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
           <div
             onClick={handleOpenPollModal}
             style={{
-              display: 'flex', alignItems: 'center', gap: '14px',
-              padding: '10px 18px', cursor: 'pointer', color: '#e9edef',
+              display: 'flex', alignItems: 'center', gap: '12px',
+              padding: '6px 16px', cursor: 'pointer', color: '#e9edef',
               fontSize: '14px', transition: 'background 0.15s'
             }}
             className="wa-sidebar-item"
           >
             <div style={{
-              width: '32px', height: '32px', borderRadius: '50%',
+              width: '28px', height: '28px', borderRadius: '50%',
               backgroundColor: '#ffbc00', display: 'flex', alignItems: 'center',
-              justifyContent: 'center', fontSize: '16px'
+              justifyContent: 'center', fontSize: '14px'
             }}>
               📊
             </div>
@@ -2257,16 +2257,16 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
           <div
             onClick={handleOpenEventModal}
             style={{
-              display: 'flex', alignItems: 'center', gap: '14px',
-              padding: '10px 18px', cursor: 'pointer', color: '#e9edef',
+              display: 'flex', alignItems: 'center', gap: '12px',
+              padding: '6px 16px', cursor: 'pointer', color: '#e9edef',
               fontSize: '14px', transition: 'background 0.15s'
             }}
             className="wa-sidebar-item"
           >
             <div style={{
-              width: '32px', height: '32px', borderRadius: '50%',
+              width: '28px', height: '28px', borderRadius: '50%',
               backgroundColor: '#02a699', display: 'flex', alignItems: 'center',
-              justifyContent: 'center', fontSize: '16px'
+              justifyContent: 'center', fontSize: '14px'
             }}>
               📅
             </div>
@@ -2280,16 +2280,16 @@ export default function ChatArea({ activeChat, onMessageSent, onMessagesRead, on
               stickerInputRef.current?.click();
             }}
             style={{
-              display: 'flex', alignItems: 'center', gap: '14px',
-              padding: '10px 18px', cursor: 'pointer', color: '#e9edef',
+              display: 'flex', alignItems: 'center', gap: '12px',
+              padding: '6px 16px', cursor: 'pointer', color: '#e9edef',
               fontSize: '14px', transition: 'background 0.15s'
             }}
             className="wa-sidebar-item"
           >
             <div style={{
-              width: '32px', height: '32px', borderRadius: '50%',
+              width: '28px', height: '28px', borderRadius: '50%',
               backgroundColor: '#00c2cb', display: 'flex', alignItems: 'center',
-              justifyContent: 'center', fontSize: '16px'
+              justifyContent: 'center', fontSize: '14px'
             }}>
               🎨
             </div>
