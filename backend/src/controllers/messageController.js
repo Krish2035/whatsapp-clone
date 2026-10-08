@@ -15,6 +15,22 @@ const messageController = {
     }
   },
 
+  async searchMessages(req, res) {
+    try {
+      const userId = req.user.id;
+      const { q, conversationId, limit } = req.query;
+      const results = await messageService.searchMessages({
+        userId,
+        query: q,
+        conversationId,
+        limit: limit ? parseInt(limit, 10) : 50
+      });
+      res.json({ messages: results });
+    } catch (err) {
+      res.status(400).json({ error: err.message });
+    }
+  },
+
   async sendMessage(req, res) {
     try {
       const senderId = req.user.id;

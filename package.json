@@ -1,0 +1,30 @@
+{
+  "name": "whatsapp-clone-root",
+  "version": "1.0.0",
+  "private": true,
+  "description": "WhatsApp Clone - Full-Stack Realtime Messaging & Voice/Video Calls",
+  "scripts": {
+    "dev": "node scripts/dev.js",
+    "start": "node scripts/dev.js",
+    "dev:backend": "npm --prefix backend run dev",
+    "dev:frontend": "npm --prefix frontend run dev",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down",
+    "docker:build": "docker compose build",
+    "docker:logs": "docker compose logs -f",
+    "install:all": "npm --prefix backend install && npm --prefix frontend install",
+    "build": "npm --prefix frontend run build"
+  },
+  "keywords": [
+    "whatsapp",
+    "whatsapp-clone",
+    "react",
+    "nextjs",
+    "nodejs",
+    "socketio",
+    "docker",
+    "webrtc"
+  ],
+  "author": "Krish",
+  "license": "MIT"
+}

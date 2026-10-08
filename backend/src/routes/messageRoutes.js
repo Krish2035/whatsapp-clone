@@ -5,6 +5,7 @@ const { authenticateToken } = require('../middlewares/authMiddleware');
 
 router.use(authenticateToken);
 
+router.get('/search', messageController.searchMessages);
 router.get('/:conversationId', messageController.getMessages);
 router.post('/', messageController.sendMessage);
 router.put('/:messageId', messageController.editMessage);

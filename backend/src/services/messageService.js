@@ -85,7 +85,7 @@ const messageService = {
     // Validate membership
     await conversationService.getConversationById(numChatId, numUserId);
 
-    const result = await pool.query(
+    const result = await pool.readQuery(
       `SELECT 
         m.id, 
         m.chat_id as "conversationId", 
@@ -322,6 +322,69 @@ const messageService = {
        RETURNING id, chat_id as "conversationId", sender_id as "senderId", status`,
       [userId]
     );
+    return result.rows;
+  },
+
+  /**
+   * Search messages using full-text and indexed keyword matching
+   */
+  async searchMessages({ userId, query, conversationId = null, limit = 50 }) {
+    if (!query || !query.trim()) {
+      return [];
+    }
+
+    const numUserId = parseInt(userId, 10);
+    const searchTerm = `%${query.trim()}%`;
+
+    let sql;
+    let params;
+
+    if (conversationId) {
+      const numChatId = parseInt(conversationId, 10);
+      await conversationService.getConversationById(numChatId, numUserId);
+
+      sql = `SELECT 
+              m.id, 
+              m.chat_id as "conversationId", 
+              m.sender_id as "senderId", 
+              m.receiver_id as "receiverId", 
+              m.content, 
+              m.media_url as "mediaUrl", 
+              m.media_type as "type", 
+              m.status, 
+              m.created_at as "createdAt",
+              json_build_object('id', u.id, 'username', u.username, 'avatar_url', u.avatar_url) as sender
+             FROM messages m
+             JOIN users u ON m.sender_id = u.id
+             WHERE m.chat_id = $1 
+               AND m.is_deleted = false
+               AND m.content ILIKE $2
+             ORDER BY m.created_at DESC
+             LIMIT $3`;
+      params = [numChatId, searchTerm, limit];
+    } else {
+      sql = `SELECT 
+              m.id, 
+              m.chat_id as "conversationId", 
+              m.sender_id as "senderId", 
+              m.receiver_id as "receiverId", 
+              m.content, 
+              m.media_url as "mediaUrl", 
+              m.media_type as "type", 
+              m.status, 
+              m.created_at as "createdAt",
+              json_build_object('id', u.id, 'username', u.username, 'avatar_url', u.avatar_url) as sender
+             FROM messages m
+             JOIN users u ON m.sender_id = u.id
+             JOIN chat_participants cp ON cp.chat_id = m.chat_id AND cp.user_id = $1
+             WHERE m.is_deleted = false
+               AND m.content ILIKE $2
+             ORDER BY m.created_at DESC
+             LIMIT $3`;
+      params = [numUserId, searchTerm, limit];
+    }
+
+    const result = await pool.readQuery(sql, params);
     return result.rows;
   }
 };

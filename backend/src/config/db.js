@@ -7,11 +7,14 @@ require('dotenv').config();
 
 let usePg = false;
 let pgPool = null;
+let pgReadPool = null;
 let sqliteDb = null;
 let initPromise = null;
 
 const dbHost = process.env.DB_HOST || 'localhost';
 const dbPort = parseInt(process.env.DB_PORT || '5432', 10);
+const dbReadHost = process.env.DB_READ_HOST || process.env.DB_HOST || 'localhost';
+const dbReadPort = parseInt(process.env.DB_READ_PORT || process.env.DB_PORT || '5432', 10);
 
 function checkPgPort(host, port, timeoutMs = 500) {
   return new Promise((resolve) => {
@@ -61,6 +64,17 @@ async function ensurePgSchema(poolInstance) {
         
         // Auto-update self-chat messages to 'read' status
         await poolInstance.query("UPDATE messages SET status = 'read' WHERE sender_id = receiver_id OR receiver_id IS NULL");
+
+        // High Efficiency Search Indexing (Full-Text & Trigram)
+        try {
+          await poolInstance.query('CREATE EXTENSION IF NOT EXISTS pg_trgm');
+          await poolInstance.query('CREATE INDEX IF NOT EXISTS idx_messages_content_trgm ON messages USING gin (content gin_trgm_ops)');
+          await poolInstance.query('CREATE INDEX IF NOT EXISTS idx_users_username_trgm ON users USING gin (username gin_trgm_ops)');
+          await poolInstance.query('CREATE INDEX IF NOT EXISTS idx_users_email_trgm ON users USING gin (email gin_trgm_ops)');
+          await poolInstance.query("CREATE INDEX IF NOT EXISTS idx_messages_fts ON messages USING gin (to_tsvector('english', content))");
+        } catch (idxNotice) {
+          // Extension might require superuser; standard B-Tree index from schema.sql is already active
+        }
       } catch (colErr) {
         console.warn('PostgreSQL column auto-migration warning:', colErr.message);
       }
@@ -101,35 +115,75 @@ function ensureInit() {
           usePg = true;
           console.log('✅ Connected to Cloud PostgreSQL Database successfully.');
           await ensurePgSchema(pgPool);
-          return;
         } catch (err) {
           console.error('❌ Cloud PostgreSQL connection failed:', err.message);
         }
       }
 
-      const isPgAvailable = await checkPgPort(dbHost, dbPort, 300);
-      if (isPgAvailable) {
-        try {
-          pgPool = new Pool({
-            host: dbHost,
-            port: dbPort,
-            user: process.env.DB_USER || 'postgres',
-            password: process.env.DB_PASSWORD || 'postgres',
-            database: process.env.DB_NAME || 'whatsapp_clone',
-            connectionTimeoutMillis: 2000,
-          });
-          const client = await pgPool.connect();
-          client.release();
-          usePg = true;
-          console.log('✅ Connected to Local PostgreSQL Database successfully.');
-          await ensurePgSchema(pgPool);
-          return;
-        } catch (err) {
-          console.log('ℹ️ Local PostgreSQL connection attempt failed. Using embedded SQLite database.');
+      if (!usePg) {
+        const isPgAvailable = await checkPgPort(dbHost, dbPort, 300);
+        if (isPgAvailable) {
+          try {
+            pgPool = new Pool({
+              host: dbHost,
+              port: dbPort,
+              user: process.env.DB_USER || 'postgres',
+              password: process.env.DB_PASSWORD || 'postgres',
+              database: process.env.DB_NAME || 'whatsapp_clone',
+              connectionTimeoutMillis: 2000,
+            });
+            const client = await pgPool.connect();
+            client.release();
+            usePg = true;
+            console.log('✅ Connected to Local PostgreSQL Database successfully.');
+            await ensurePgSchema(pgPool);
+          } catch (err) {
+            console.log('ℹ️ Local PostgreSQL connection attempt failed. Using embedded SQLite database.');
+          }
         }
-      } else {
-        console.log('ℹ️ Local SQLite database active (whatsapp_clone.db).');
       }
+
+      if (usePg) {
+        // Initialize PostgreSQL Read Replica Pool (if configured)
+        if (process.env.DATABASE_READ_URL) {
+          try {
+            pgReadPool = new Pool({
+              connectionString: process.env.DATABASE_READ_URL,
+              ssl: process.env.DATABASE_READ_URL.includes('sslmode=disable') ? false : { rejectUnauthorized: false },
+              connectionTimeoutMillis: 5000,
+            });
+            const rClient = await pgReadPool.connect();
+            rClient.release();
+            console.log('✅ Connected to PostgreSQL Read Replica successfully.');
+          } catch (rErr) {
+            console.warn('⚠️ Read replica connection failed, falling back to primary pool:', rErr.message);
+            pgReadPool = pgPool;
+          }
+        } else if (process.env.DB_READ_HOST && process.env.DB_READ_HOST !== dbHost) {
+          try {
+            pgReadPool = new Pool({
+              host: dbReadHost,
+              port: dbReadPort,
+              user: process.env.DB_READ_USER || process.env.DB_USER || 'postgres',
+              password: process.env.DB_READ_PASSWORD || process.env.DB_PASSWORD || 'postgres',
+              database: process.env.DB_READ_NAME || process.env.DB_NAME || 'whatsapp_clone',
+              connectionTimeoutMillis: 3000,
+            });
+            const rClient = await pgReadPool.connect();
+            rClient.release();
+            console.log('✅ Connected to PostgreSQL Read Replica successfully.');
+          } catch (rErr) {
+            console.warn('⚠️ Read replica connection failed, falling back to primary pool:', rErr.message);
+            pgReadPool = pgPool;
+          }
+        } else {
+          // No dedicated replica configured; read pool points to primary
+          pgReadPool = pgPool;
+        }
+        return;
+      }
+
+      console.log('ℹ️ Local SQLite database active (whatsapp_clone.db).');
       initSqlite();
     })();
   }
@@ -213,6 +267,13 @@ function initSqlite() {
       sqliteDb.exec(seedSql);
     } catch (e) {}
   }
+
+  // SQLite Search & Performance Indexes
+  try {
+    sqliteDb.exec('CREATE INDEX IF NOT EXISTS idx_sqlite_messages_content ON messages(content)');
+    sqliteDb.exec('CREATE INDEX IF NOT EXISTS idx_sqlite_users_username ON users(username)');
+    sqliteDb.exec('CREATE INDEX IF NOT EXISTS idx_sqlite_users_email ON users(email)');
+  } catch (e) {}
 }
 
 function prepareSqliteQuery(sql, params = []) {
@@ -297,9 +358,29 @@ const pool = {
       }
     }
   },
+  /**
+   * Routes read-only queries (SELECTs) to PostgreSQL read replica if configured.
+   * Gracefully fails over to primary pool or SQLite if replica is unavailable.
+   */
+  async readQuery(text, params = []) {
+    await ensureInit();
+
+    if (usePg && pgReadPool) {
+      try {
+        return await pgReadPool.query(text, params);
+      } catch (readErr) {
+        console.warn('⚠️ Read replica query error (failing over to primary):', readErr.message);
+        return await pgPool.query(text, params);
+      }
+    }
+
+    return await this.query(text, params);
+  },
   on(event, listener) {
     if (pgPool) pgPool.on(event, listener);
-  }
+  },
+  getPrimaryPool: () => pgPool,
+  getReadPool: () => pgReadPool || pgPool
 };
 
 module.exports = pool;

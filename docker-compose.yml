@@ -1,0 +1,186 @@
+version: '3.8'
+
+services:
+  # 1. Nginx Unified Gateway & Load Balancer with WebSocket Sticky Session Support
+  loadbalancer:
+    image: nginx:alpine
+    container_name: whatsapp_loadbalancer
+    restart: always
+    ports:
+      - "80:80"
+      - "5000:5000"
+    volumes:
+      - ./loadbalancer/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - backend-1
+      - backend-2
+      - frontend
+    networks:
+      - whatsapp_net
+
+  # 2. Frontend Next.js Web App
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        - NEXT_PUBLIC_API_URL=http://localhost:5000
+        - NEXT_PUBLIC_SOCKET_URL=http://localhost:5000
+        - NEXT_PUBLIC_AGORA_APP_ID=4876b5d9bc3741ec9cb33b3dcfdbca91
+    container_name: whatsapp_frontend
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - NEXT_PUBLIC_API_URL=http://localhost:5000
+      - NEXT_PUBLIC_SOCKET_URL=http://localhost:5000
+      - NEXT_PUBLIC_AGORA_APP_ID=4876b5d9bc3741ec9cb33b3dcfdbca91
+    depends_on:
+      - backend-1
+      - backend-2
+    networks:
+      - whatsapp_net
+
+  # 3. Backend Instance 1
+  backend-1:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: whatsapp_backend_1
+    restart: always
+    environment:
+      - NODE_ENV=production
+      - PORT=5000
+      - DB_HOST=postgres-primary
+      - DB_PORT=5432
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres
+      - DB_NAME=whatsapp_clone
+      - DB_READ_HOST=postgres-replica
+      - DB_READ_PORT=5432
+      - DB_READ_USER=postgres
+      - DB_READ_PASSWORD=postgres
+      - DB_READ_NAME=whatsapp_clone
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - JWT_SECRET=whatsapp_super_secret_jwt_key_2026
+      - CLIENT_URL=http://localhost:5173,http://localhost:3000,http://localhost
+    volumes:
+      - uploads_data:/app/uploads
+    depends_on:
+      postgres-primary:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - whatsapp_net
+
+  # 4. Backend Instance 2 (Scale Out Replica for High Availability)
+  backend-2:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: whatsapp_backend_2
+    restart: always
+    environment:
+      - NODE_ENV=production
+      - PORT=5000
+      - DB_HOST=postgres-primary
+      - DB_PORT=5432
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres
+      - DB_NAME=whatsapp_clone
+      - DB_READ_HOST=postgres-replica
+      - DB_READ_PORT=5432
+      - DB_READ_USER=postgres
+      - DB_READ_PASSWORD=postgres
+      - DB_READ_NAME=whatsapp_clone
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - JWT_SECRET=whatsapp_super_secret_jwt_key_2026
+      - CLIENT_URL=http://localhost:5173,http://localhost:3000,http://localhost
+    volumes:
+      - uploads_data:/app/uploads
+    depends_on:
+      postgres-primary:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - whatsapp_net
+
+  # 5. Redis Cache & Fast Memory Store
+  redis:
+    image: redis:7-alpine
+    container_name: whatsapp_redis
+    restart: always
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - whatsapp_net
+
+  # 6. Primary PostgreSQL Database (Write Master)
+  postgres-primary:
+    image: postgres:16-alpine
+    container_name: whatsapp_postgres_primary
+    restart: always
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=whatsapp_clone
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_primary_data:/var/lib/postgresql/data
+      - ./backend/src/db/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+      - ./backend/src/db/seed.sql:/docker-entrypoint-initdb.d/02_seed.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d whatsapp_clone"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - whatsapp_net
+
+  # 7. Read Replica PostgreSQL Database (Query Read Replica)
+  postgres-replica:
+    image: postgres:16-alpine
+    container_name: whatsapp_postgres_replica
+    restart: always
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=whatsapp_clone
+    ports:
+      - "5433:5432"
+    volumes:
+      - pg_replica_data:/var/lib/postgresql/data
+      - ./backend/src/db/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+      - ./backend/src/db/seed.sql:/docker-entrypoint-initdb.d/02_seed.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d whatsapp_clone"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - whatsapp_net
+
+networks:
+  whatsapp_net:
+    driver: bridge
+
+volumes:
+  pg_primary_data:
+  pg_replica_data:
+  redis_data:
+  uploads_data:

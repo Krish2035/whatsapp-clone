@@ -106,3 +106,50 @@ This guide provides complete, step-by-step instructions to deploy your **WhatsAp
 4. **Cross-Network Voice & Video Call Test**:
    - Initiate a voice or video call.
    - WebRTC signaling and STUN/TURN fallback connects audio/video streams across different networks.
+
+---
+
+## Step 5: Advanced Infrastructure (Docker, Nginx Load Balancer, Redis & Read Replicas)
+
+The backend includes a production-grade infrastructure stack for high scalability:
+
+### 1. Docker Compose Multi-Container Deployment
+Run the full distributed cluster with a single command:
+```bash
+docker compose up --build -d
+```
+This orchestrates:
+- **`loadbalancer`**: Nginx load balancer on port `80` with WebSocket sticky balancing (`ip_hash`)
+- **`backend-1` & `backend-2`**: Redundant, auto-scaling backend replicas
+- **`postgres-primary`**: Primary PostgreSQL 16 database (port `5432`)
+- **`postgres-replica`**: Read Replica PostgreSQL 16 database (port `5433`)
+- **`redis`**: High-speed distributed cache & pub/sub service (port `6379`)
+
+### 2. Interactive Swagger UI Documentation
+Open the interactive OpenAPI 3.0 documentation in your browser:
+- **URL**: `http://localhost:5000/api/docs` (or via Load Balancer `http://localhost/api/docs`)
+- **JSON Spec**: `http://localhost:5000/api/docs.json`
+- Includes schemas and try-it-out endpoints for Auth, Users, Messages, Media, Statuses, Calls, and Admin.
+
+### 3. Rate Limiting Protection
+DDoS and credential stuffing mitigations are active:
+- `/api/auth/login` and `/api/auth/register`: 30 attempts per 15 minutes.
+- `/api/media/upload`: 50 uploads per 15 minutes.
+- General API: 300 requests per 15 minutes.
+
+### 4. Database Read Replica & Full-Text Search
+- **Read Replica Splitting**: Configured via `DATABASE_READ_URL` or `DB_READ_HOST`/`DB_READ_PORT`. Read-heavy operations automatically route to the replica via `pool.readQuery()`.
+- **Search Indexing**: PostgreSQL `pg_trgm` and GIN full-text indexes optimize keyword search on messages and users.
+
+### 5. Redis Caching with Resilient Fallback
+- Key-value caching for user profiles and frequent queries.
+- Automatic in-memory fallback if Redis is not running locally.
+
+### 6. Drizzle ORM
+Drizzle ORM schema definitions are located in `src/db/drizzle/schema.js`.
+Available CLI commands:
+```bash
+npm run drizzle:generate  # Generate database migrations
+npm run drizzle:push      # Push schema changes to PostgreSQL
+npm run drizzle:studio    # Open interactive Drizzle Studio database UI
+```

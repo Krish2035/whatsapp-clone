@@ -61,6 +61,11 @@ CREATE INDEX IF NOT EXISTS idx_messages_receiver_id ON messages(receiver_id);
 CREATE INDEX IF NOT EXISTS idx_messages_receiver_status ON messages(receiver_id, status);
 CREATE INDEX IF NOT EXISTS idx_chat_participants_user_id ON chat_participants(user_id);
 
+-- High-Efficiency Search Indexes (Full-Text & Keyword Matching)
+CREATE INDEX IF NOT EXISTS idx_messages_content ON messages(content);
+CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
+CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+
 -- WhatsApp Status Feature Tables
 CREATE TABLE IF NOT EXISTS statuses (
   id SERIAL PRIMARY KEY,

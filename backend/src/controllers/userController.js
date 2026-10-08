@@ -1,11 +1,12 @@
 const pool = require('../config/db');
+const cacheService = require('../services/cacheService');
 
 exports.searchUsers = async (req, res, next) => {
   try {
     const { q } = req.query;
 
     if (!q || q.trim() === '') {
-      const result = await pool.query(
+      const result = await pool.readQuery(
         `SELECT id, username, email, avatar_url, status_message 
          FROM users 
          ORDER BY username ASC 
@@ -15,7 +16,7 @@ exports.searchUsers = async (req, res, next) => {
     }
 
     const searchQuery = `%${q.trim()}%`;
-    const result = await pool.query(
+    const result = await pool.readQuery(
       `SELECT id, username, email, avatar_url, status_message 
        FROM users 
        WHERE username ILIKE $1 OR email ILIKE $1
@@ -33,17 +34,22 @@ exports.searchUsers = async (req, res, next) => {
 exports.getMe = async (req, res, next) => {
   try {
     const currentUserId = req.user.id;
-    const result = await pool.query(
-      `SELECT id, username, email, avatar_url, status_message, is_admin, is_online, last_seen, created_at 
-       FROM users WHERE id = $1`,
-      [currentUserId]
-    );
+    const cacheKey = `user:profile:${currentUserId}`;
 
-    if (result.rows.length === 0) {
+    const user = await cacheService.getOrSet(cacheKey, async () => {
+      const result = await pool.readQuery(
+        `SELECT id, username, email, avatar_url, status_message, is_admin, is_online, last_seen, created_at 
+         FROM users WHERE id = $1`,
+        [currentUserId]
+      );
+      return result.rows[0] || null;
+    }, 180);
+
+    if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    res.json({ user: result.rows[0] });
+    res.json({ user });
   } catch (error) {
     next(error);
   }
@@ -63,6 +69,9 @@ exports.updateProfile = async (req, res, next) => {
        RETURNING id, username, email, avatar_url, status_message`,
       [status_message, avatar_url, currentUserId]
     );
+
+    // Invalidate user profile cache
+    await cacheService.del(`user:profile:${currentUserId}`);
 
     res.json({ user: result.rows[0] });
   } catch (error) {

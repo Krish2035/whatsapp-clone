@@ -4,6 +4,9 @@ const path = require('path');
 require('dotenv').config();
 
 const pool = require('./config/db');
+const { swaggerUi, swaggerDocument, customCss } = require('./docs/swagger');
+const { apiLimiter, authLimiter, uploadLimiter } = require('./middlewares/rateLimiter');
+
 const authRoutes = require('./routes/authRoutes');
 const userRoutes = require('./routes/userRoutes');
 const conversationRoutes = require('./routes/conversationRoutes');
@@ -31,6 +34,7 @@ app.use(cors({
   },
   credentials: true
 }));
+
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
@@ -52,11 +56,12 @@ app.get('/', (req, res) => {
   res.json({
     service: 'WhatsApp Clone Backend API',
     status: 'online',
+    docs: '/api/docs',
     timestamp: new Date().toISOString()
   });
 });
 
-// Health Check Endpoint
+// Health Check Endpoint (Excluded from strict rate limits)
 app.get('/api/health', async (req, res) => {
   try {
     const dbRes = await pool.query('SELECT NOW()');
@@ -73,6 +78,23 @@ app.get('/api/health', async (req, res) => {
     });
   }
 });
+
+// Swagger UI Documentation Endpoints
+app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument, {
+  customCss,
+  customSiteTitle: 'WhatsApp Clone API Documentation'
+}));
+app.get('/api/docs.json', (req, res) => {
+  res.json(swaggerDocument);
+});
+app.get('/docs', (req, res) => res.redirect('/api/docs'));
+
+// Rate Limiting Middlewares (DDoS & Brute-Force Protection)
+app.use('/api/auth/login', authLimiter);
+app.use('/api/auth/register', authLimiter);
+app.use('/api/media/upload', uploadLimiter);
+app.use('/api/upload', uploadLimiter);
+app.use('/api', apiLimiter);
 
 const mediaController = require('./controllers/mediaController');
 
