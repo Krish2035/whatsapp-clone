@@ -54,6 +54,14 @@ export async function loginUser(email, password) {
   });
 }
 
+export async function loginWithGoogle(profile) {
+  return apiFetch('/auth/google', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(profile),
+  });
+}
+
 export async function fetchMe() {
   const data = await apiFetch('/users/me', {
     headers: getAuthHeaders(),

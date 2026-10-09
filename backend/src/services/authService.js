@@ -75,6 +75,62 @@ const authService = {
     return { user, token };
   },
 
+  async googleAuth({ email, name, avatarUrl, googleId }) {
+    if (!email) {
+      throw new Error('Google email is required');
+    }
+
+    const cleanEmail = email.toLowerCase().trim();
+    const baseUsername = (name || email.split('@')[0]).replace(/[^a-zA-Z0-9_]/g, '_').slice(0, 30) || 'user';
+
+    const existingUser = await pool.query(
+      'SELECT id, username, email, avatar_url, status_message, is_admin, is_online, last_seen, created_at FROM users WHERE LOWER(email) = $1',
+      [cleanEmail]
+    );
+
+    let user;
+    if (existingUser.rows.length > 0) {
+      user = existingUser.rows[0];
+      if ((!user.avatar_url || user.avatar_url.includes('dicebear')) && avatarUrl) {
+        await pool.query('UPDATE users SET avatar_url = $1 WHERE id = $2', [avatarUrl, user.id]);
+        user.avatar_url = avatarUrl;
+      }
+    } else {
+      let chosenUsername = baseUsername;
+      const nameCheck = await pool.query('SELECT id FROM users WHERE LOWER(username) = $1', [chosenUsername.toLowerCase()]);
+      if (nameCheck.rows.length > 0) {
+        chosenUsername = `${baseUsername}_${Math.floor(1000 + Math.random() * 9000)}`;
+      }
+
+      const salt = await bcrypt.genSalt(10);
+      const dummyPassword = Math.random().toString(36).slice(-10) + Date.now();
+      const passwordHash = await bcrypt.hash(dummyPassword, salt);
+      const userAvatar = avatarUrl || `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(chosenUsername)}`;
+
+      const result = await pool.query(
+        `INSERT INTO users (username, email, password_hash, avatar_url, status_message)
+         VALUES ($1, $2, $3, $4, $5)
+         RETURNING id, username, email, avatar_url, status_message, is_admin, is_online, last_seen, created_at`,
+        [
+          chosenUsername,
+          cleanEmail,
+          passwordHash,
+          userAvatar,
+          'Hey there! I am using WhatsApp.'
+        ]
+      );
+      user = result.rows[0];
+    }
+
+    const token = jwt.sign(
+      { id: user.id, username: user.username, email: user.email },
+      process.env.JWT_SECRET || 'supersecretjwtkey_change_me_in_production',
+      { expiresIn: '7d' }
+    );
+
+    return { user, token };
+  },
+
   async getUserById(userId) {
     const result = await pool.query(
       'SELECT id, username, email, avatar_url, status_message, is_admin, is_online, last_seen, created_at FROM users WHERE id = $1',

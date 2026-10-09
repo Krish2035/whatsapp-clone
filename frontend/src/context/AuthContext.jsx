@@ -1,5 +1,5 @@
 import React, { createContext, useState, useEffect, useContext } from 'react';
-import { fetchMe, loginUser, registerUser, updateProfile as apiUpdateProfile } from '../services/api';
+import { fetchMe, loginUser, registerUser, loginWithGoogle, updateProfile as apiUpdateProfile } from '../services/api';
 
 const AuthContext = createContext(null);
 
@@ -64,6 +64,14 @@ export const AuthProvider = ({ children }) => {
     return data;
   };
 
+  const continueWithGoogle = async (googleProfile) => {
+    const data = await loginWithGoogle(googleProfile);
+    localStorage.setItem('token', data.token);
+    setToken(data.token);
+    setUser(data.user);
+    return data;
+  };
+
   const updateUserProfile = async (status_message, avatar_url) => {
     const updated = await apiUpdateProfile(status_message, avatar_url);
     setUser(updated);
@@ -71,7 +79,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, token, loading, login, register, logout, updateUserProfile }}>
+    <AuthContext.Provider value={{ user, token, loading, login, register, continueWithGoogle, logout, updateUserProfile }}>
       {children}
     </AuthContext.Provider>
   );
@@ -86,6 +94,7 @@ export const useAuth = () => {
       loading: false,
       login: async () => {},
       register: async () => {},
+      continueWithGoogle: async () => {},
       logout: () => {},
       updateUserProfile: async () => {}
     };

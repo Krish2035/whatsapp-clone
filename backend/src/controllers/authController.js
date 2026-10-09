@@ -21,6 +21,16 @@ const authController = {
     }
   },
 
+  async googleAuth(req, res, next) {
+    try {
+      const { email, name, avatarUrl, googleId } = req.body;
+      const data = await authService.googleAuth({ email, name, avatarUrl, googleId });
+      res.json(data);
+    } catch (err) {
+      res.status(400).json({ error: err.message });
+    }
+  },
+
   async me(req, res, next) {
     try {
       const user = await authService.getUserById(req.user.id);
