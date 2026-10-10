@@ -24,13 +24,14 @@ class FirebaseService {
       const firebaseApp = await import('firebase/app');
       const firestore = await import('firebase/firestore');
 
+      const projectId = getEnv('NEXT_PUBLIC_FIREBASE_PROJECT_ID') || getEnv('VITE_FIREBASE_PROJECT_ID', this.projectId);
       const firebaseConfig = {
-        apiKey: getEnv('VITE_FIREBASE_API_KEY', 'AIzaSyDemoWhatsAppWebCloneApiKey123'),
-        authDomain: getEnv('VITE_FIREBASE_AUTH_DOMAIN', `${this.projectId}.firebaseapp.com`),
-        projectId: this.projectId,
-        storageBucket: getEnv('VITE_FIREBASE_STORAGE_BUCKET', `${this.projectId}.appspot.com`),
-        messagingSenderId: getEnv('VITE_FIREBASE_MESSAGING_SENDER_ID', '123456789012'),
-        appId: getEnv('VITE_FIREBASE_APP_ID', '1:123456789012:web:demo1234567890')
+        apiKey: getEnv('NEXT_PUBLIC_FIREBASE_API_KEY') || getEnv('VITE_FIREBASE_API_KEY', 'AIzaSyDemoWhatsAppWebCloneApiKey123'),
+        authDomain: getEnv('NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN') || getEnv('VITE_FIREBASE_AUTH_DOMAIN', `${projectId}.firebaseapp.com`),
+        projectId: projectId,
+        storageBucket: getEnv('NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET') || getEnv('VITE_FIREBASE_STORAGE_BUCKET', `${projectId}.appspot.com`),
+        messagingSenderId: getEnv('NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID') || getEnv('VITE_FIREBASE_MESSAGING_SENDER_ID', '123456789012'),
+        appId: getEnv('NEXT_PUBLIC_FIREBASE_APP_ID') || getEnv('VITE_FIREBASE_APP_ID', '1:123456789012:web:demo1234567890')
       };
 
       this.app = firebaseApp.getApps().length === 0 ? firebaseApp.initializeApp(firebaseConfig) : firebaseApp.getApps()[0];

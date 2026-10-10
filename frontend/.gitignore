@@ -16,6 +16,10 @@ dist-ssr
 .env.*
 !.env.example
 
+# Sensitive credentials & local Firebase configs
+src/config/google.json
+!src/config/google.json.example
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

@@ -11,21 +11,11 @@ import googleConfig from '../config/google.json';
 const DEMO_API_KEY = 'AIzaSyDemoWhatsAppWebCloneApiKey123';
 
 export function getResolvedFirebaseConfig() {
-  // Check google.json first
-  if (
-    googleConfig &&
-    googleConfig.apiKey &&
-    !googleConfig.apiKey.includes('PASTE_YOUR') &&
-    !googleConfig.apiKey.includes('Demo')
-  ) {
-    return googleConfig;
-  }
-
-  // Check Environment variables
+  // 1. Check Environment variables (.env / .env.local) first
   const apiKey = getEnv('NEXT_PUBLIC_FIREBASE_API_KEY') || getEnv('VITE_FIREBASE_API_KEY');
   const projectId = getEnv('NEXT_PUBLIC_FIREBASE_PROJECT_ID') || getEnv('VITE_FIREBASE_PROJECT_ID', 'whatsapp-clone');
 
-  if (apiKey && apiKey !== DEMO_API_KEY && !apiKey.includes('Demo')) {
+  if (apiKey && apiKey !== DEMO_API_KEY && !apiKey.includes('YOUR') && !apiKey.includes('Demo')) {
     return {
       apiKey,
       authDomain: getEnv('NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN') || getEnv('VITE_FIREBASE_AUTH_DOMAIN', `${projectId}.firebaseapp.com`),
@@ -34,6 +24,17 @@ export function getResolvedFirebaseConfig() {
       messagingSenderId: getEnv('NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID') || getEnv('VITE_FIREBASE_MESSAGING_SENDER_ID', '123456789012'),
       appId: getEnv('NEXT_PUBLIC_FIREBASE_APP_ID') || getEnv('VITE_FIREBASE_APP_ID', '1:123456789012:web:demo1234567890')
     };
+  }
+
+  // 2. Fallback to local google.json only if explicitly set and not a template placeholder
+  if (
+    googleConfig &&
+    googleConfig.apiKey &&
+    !googleConfig.apiKey.includes('PASTE_YOUR') &&
+    !googleConfig.apiKey.includes('YOUR_FIREBASE') &&
+    !googleConfig.apiKey.includes('Demo')
+  ) {
+    return googleConfig;
   }
 
   return null;
