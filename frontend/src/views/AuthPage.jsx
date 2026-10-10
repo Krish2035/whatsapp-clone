@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { signInWithGoogleFirebase, isFirebaseConfigured } from '../services/googleAuthService';
 
@@ -11,6 +11,16 @@ export default function AuthPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+
+  const videoRef = useRef(null);
+
+  useEffect(() => {
+    if (videoRef.current) {
+      videoRef.current.defaultMuted = true;
+      videoRef.current.muted = true;
+      videoRef.current.play().catch(() => {});
+    }
+  }, []);
 
   // Fallback Google Sign-In Modal when Firebase API key is not configured
   const [showGoogleModal, setShowGoogleModal] = useState(false);
@@ -82,27 +92,40 @@ export default function AuthPage() {
   };
 
   return (
-    <div style={{
-      width: '100vw',
-      height: '100vh',
-      backgroundColor: 'var(--wa-bg-deep)',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      padding: '20px'
-    }}>
-      <div 
-        className="wa-modal-content"
-        style={{
-          width: '92%',
-          maxWidth: '420px',
-          backgroundColor: 'var(--wa-bg-panel)',
-          borderRadius: '16px',
-          padding: '32px',
-          boxShadow: '0 20px 40px rgba(0,0,0,0.5)',
-          border: '1px solid var(--wa-border)'
-        }}
-      >
+    <div className="auth-split-wrapper">
+      {/* Left side: Video showcase */}
+      <div className="auth-left-section">
+        <div className="auth-video-container">
+          <video
+            ref={videoRef}
+            className="auth-left-video"
+            autoPlay
+            loop
+            muted
+            playsInline
+            controls={false}
+          >
+            <source src="/Messaging_Application.mp4" type="video/mp4" />
+            <source src="/resources/Messaging_Application.mp4" type="video/mp4" />
+            Your browser does not support the video tag.
+          </video>
+        </div>
+      </div>
+
+      {/* Right side: Auth Form */}
+      <div className="auth-right-section">
+        <div 
+          className="wa-modal-content"
+          style={{
+            width: '100%',
+            maxWidth: '420px',
+            backgroundColor: 'var(--wa-bg-panel)',
+            borderRadius: '16px',
+            padding: '32px',
+            boxShadow: '0 20px 40px rgba(0,0,0,0.5)',
+            border: '1px solid var(--wa-border)'
+          }}
+        >
         {/* WhatsApp Brand Header */}
         <div style={{ textAlign: 'center', marginBottom: '28px' }}>
           <div style={{
@@ -322,6 +345,7 @@ export default function AuthPage() {
           {googleLoading ? 'Signing in with Google...' : 'Continue with Google'}
         </button>
       </div>
+    </div>
 
       {/* Google Account Selector & Setup Fallback Modal */}
       {showGoogleModal && (
