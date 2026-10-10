@@ -104,9 +104,12 @@ export default function AuthPage() {
             muted
             playsInline
             controls={false}
+            preload="auto"
           >
-            <source src="/Messaging_Application.mp4" type="video/mp4" />
+            <source src="/resources/Messaging_application.mp4" type="video/mp4" />
+            <source src="/Messaging_application.mp4" type="video/mp4" />
             <source src="/resources/Messaging_Application.mp4" type="video/mp4" />
+            <source src="/Messaging_Application.mp4" type="video/mp4" />
             Your browser does not support the video tag.
           </video>
         </div>
