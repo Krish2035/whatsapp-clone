@@ -1,7 +1,8 @@
 {
-  "short_name": "WhatsApp",
-  "name": "WhatsApp Web Clone",
-  "description": "WhatsApp Web Clone - Real-time Messaging, Calling & AI Assistant",
+  "short_name": "WhatsApp Web",
+  "name": "WhatsApp Web Vercel - Real-Time WhatsApp Web Clone",
+  "description": "WhatsApp Web clone hosted on Vercel with real-time messaging, Agora audio & video calls, status stories, voice notes, and AI assistant.",
+  "categories": ["communication", "social", "productivity"],
   "icons": [
     {
       "src": "/icon-192.png",

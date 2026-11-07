@@ -1,6 +1,30 @@
-# WhatsApp Clone (Full-Stack Next.js + Node.js + PostgreSQL + Docker)
+# WhatsApp Web Vercel - Real-Time WhatsApp Web Clone
 
-Full-stack real-time messaging and voice/video calling application clone built with Next.js, React, Node.js Express, PostgreSQL, Redis, Socket.IO, and WebRTC.
+[![WhatsApp Web Vercel Demo](https://img.shields.io/badge/Live%20Demo-WhatsApp%20Web%20Vercel-00a884?style=for-the-badge&logo=vercel&logoColor=white)](https://whatsapp-clone-nu-lyart.vercel.app)
+[![Next.js 16](https://img.shields.io/badge/Next.js-16.3-black?style=for-the-badge&logo=next.js)](https://nextjs.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)](LICENSE)
+
+> **🚀 Live Website on Vercel**: **[https://whatsapp-clone-nu-lyart.vercel.app](https://whatsapp-clone-nu-lyart.vercel.app)**  
+> **WhatsApp Web Vercel** is a production-ready, full-stack real-time clone of WhatsApp Web deployed on Vercel. Features instant 1-on-1 and group messaging, Agora audio & video calling, voice notes, status stories, Meta AI assistant, and dark mode.
+
+---
+
+## 🌟 Live Demo on Vercel
+Experience the live app immediately on Vercel:
+👉 **[Open WhatsApp Web Vercel](https://whatsapp-clone-nu-lyart.vercel.app)**
+
+---
+
+## ✨ Features
+
+- 💬 **Instant Real-Time Messaging**: Built with Socket.IO for zero-latency 1-on-1 and group chats.
+- 📞 **Voice & Video Calling**: High-definition calls powered by Agora RTC.
+- 🎙️ **Voice Notes**: In-browser audio recording and voice message playback.
+- 📸 **Status Stories**: 24-hour disappearing multimedia status updates.
+- 🤖 **Meta AI Integration**: Embedded conversational AI chatbot powered by Groq.
+- 🌙 **Official Dark Theme**: Pixel-perfect WhatsApp Web UI and animations.
+- 📱 **Progressive Web App (PWA)**: Installable on Desktop, iOS, and Android.
+- ⚡ **Vercel Edge & CDN**: Optimized for ultra-fast loading, Core Web Vitals, and search engine indexation.
 
 ---
 
@@ -49,18 +73,16 @@ Whatsapp-clone/
 ├── docker-compose.yml    # Complete multi-service Docker configuration
 ├── scripts/
 │   └── dev.js            # Unified service runner for npm run dev
-├── frontend/             # Next.js / React Client App
-│   ├── Dockerfile        # Production Dockerfile
-│   ├── .dockerignore
-│   ├── .env.local        # Local backend endpoints
+├── frontend/             # Next.js App Router (Deployed on Vercel)
 │   ├── src/
+│   │   ├── app/          # App router: layout, metadata, robots.js, sitemap.js
 │   │   ├── components/   # ChatArea, Sidebar, Calls, Modals
 │   │   ├── services/     # API & Socket clients
-│   │   └── app/          # Next.js App Router
+│   │   └── views/        # Home, AuthPage
+│   ├── public/           # Manifest, icons, OpenGraph card
 │   └── package.json
 │
-├── backend/              # Node.js Express Backend Server
-│   ├── Dockerfile        # Production Dockerfile
+├── backend/              # Node.js Express Backend Server (Deployed on Render)
 │   ├── src/
 │   │   ├── config/       # PostgreSQL DB pool & SQLite fallback
 │   │   ├── controllers/  # Auth, Chat, Message, Call logic
@@ -86,3 +108,11 @@ npm run dev:backend   # Start only the backend in dev mode
 npm run dev:frontend  # Start only the frontend in dev mode
 npm run install:all   # Install dependencies for root, backend, and frontend
 ```
+
+---
+
+## 🌐 Production Deployments
+
+- **Frontend (Vercel)**: [https://whatsapp-clone-nu-lyart.vercel.app](https://whatsapp-clone-nu-lyart.vercel.app)
+- **Backend (Render)**: `https://whatsapp-backend-ea92.onrender.com`
+- **Database (Neon PostgreSQL)**: Cloud Serverless Postgres
