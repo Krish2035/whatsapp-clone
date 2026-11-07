@@ -86,7 +86,7 @@ export const metadata = {
     ],
   },
   verification: {
-    google: process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION || '',
+    google: process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION || '-D3mET-DLurlI_3N4ftkZ7PyFG9AZ-JcgvmOsZUT_v0',
     yandex: process.env.NEXT_PUBLIC_YANDEX_VERIFICATION || '',
     other: {
       'msvalidate.01': process.env.NEXT_PUBLIC_BING_VERIFICATION || '',
@@ -160,6 +160,10 @@ export default function RootLayout({ children }) {
   return (
     <html lang="en">
       <head>
+        <meta
+          name="google-site-verification"
+          content="-D3mET-DLurlI_3N4ftkZ7PyFG9AZ-JcgvmOsZUT_v0"
+        />
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
